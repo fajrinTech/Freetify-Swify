@@ -1,0 +1,35 @@
+name: Freetify
+options:
+  bundleIdPrefix: com.fajrin
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "16.0"
+
+packages:
+  Supabase:
+    url: https://github.com/supabase/supabase-swift.git
+    from: 2.0.0
+
+targets:
+  Freetify v1:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - App
+      - Models
+      - Services
+      - ViewModels
+      - Views
+    dependencies:
+      - package: Supabase
+        product: Supabase
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fajrin.freetifyv1
+        PRODUCT_NAME: "Freetify v1"
+        INFOPLIST_FILE: Resources/Info.plist
+        SWIFT_VERSION: "6.0"
+        ENABLE_BITCODE: NO
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGNING_ALLOWED: NO
