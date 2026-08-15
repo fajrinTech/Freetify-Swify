@@ -1,0 +1,23 @@
+# AI & Documentation
+.agents/
+PRD.md
+
+# Xcode
+.DS_Store
+*/.DS_Store
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+.build/
+.swiftpm/
+
+# App Archives & IPAs
+*.ipa
+*.xcarchive
+Payload/
+
+# Environment / Secret keys
+.env
+.env.local
