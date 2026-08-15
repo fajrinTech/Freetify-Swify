@@ -95,10 +95,12 @@ public final class AudioPlayerService: NSObject {
     public func seek(to time: TimeInterval) {
         let cmTime = CMTime(seconds: time, preferredTimescale: 600)
         player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            guard let self = self else { return }
-            self.currentTime = time
-            self.onTimeUpdate?(time)
-            self.updatePlaybackStateInNowPlaying()
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.currentTime = time
+                self.onTimeUpdate?(time)
+                self.updatePlaybackStateInNowPlaying()
+            }
         }
     }
 
@@ -107,18 +109,20 @@ public final class AudioPlayerService: NSObject {
         // Observasi setiap 50 milidetik untuk sinkronisasi lirik yang sangat mulus
         let interval = CMTime(seconds: 0.05, preferredTimescale: 600)
         timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self else { return }
-            let seconds = CMTimeGetSeconds(time)
-            if !seconds.isNaN && !seconds.isInfinite {
-                self.currentTime = seconds
-                self.onTimeUpdate?(seconds)
+            Task { @MainActor in
+                guard let self = self else { return }
+                let seconds = CMTimeGetSeconds(time)
+                if !seconds.isNaN && !seconds.isInfinite {
+                    self.currentTime = seconds
+                    self.onTimeUpdate?(seconds)
 
-                // Update durasi aktual jika tersedia dari AVPlayerItem
-                if let currentItem = self.player?.currentItem {
-                    let itemDuration = CMTimeGetSeconds(currentItem.duration)
-                    if !itemDuration.isNaN && !itemDuration.isInfinite && itemDuration > 0 {
-                        self.duration = itemDuration
-                        self.onDurationUpdate?(itemDuration)
+                    // Update durasi aktual jika tersedia dari AVPlayerItem
+                    if let currentItem = self.player?.currentItem {
+                        let itemDuration = CMTimeGetSeconds(currentItem.duration)
+                        if !itemDuration.isNaN && !itemDuration.isInfinite && itemDuration > 0 {
+                            self.duration = itemDuration
+                            self.onDurationUpdate?(itemDuration)
+                        }
                     }
                 }
             }
@@ -142,8 +146,10 @@ public final class AudioPlayerService: NSObject {
             object: item,
             queue: .main
         ) { [weak self] _ in
-            guard let self = self else { return }
-            self.onTrackFinished?()
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.onTrackFinished?()
+            }
         }
     }
 
@@ -186,50 +192,58 @@ public final class AudioPlayerService: NSObject {
 
         commandCenter.playCommand.isEnabled = true
         commandCenter.playCommand.addTarget { [weak self] _ in
-            guard let self = self else { return .commandFailed }
-            self.play()
+            Task { @MainActor in
+                self?.play()
+            }
             return .success
         }
 
         commandCenter.pauseCommand.isEnabled = true
         commandCenter.pauseCommand.addTarget { [weak self] _ in
-            guard let self = self else { return .commandFailed }
-            self.pause()
+            Task { @MainActor in
+                self?.pause()
+            }
             return .success
         }
 
         commandCenter.togglePlayPauseCommand.isEnabled = true
         commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
-            guard let self = self else { return .commandFailed }
-            self.togglePlayPause()
+            Task { @MainActor in
+                self?.togglePlayPause()
+            }
             return .success
         }
 
         commandCenter.nextTrackCommand.isEnabled = true
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
-            guard let self = self else { return .commandFailed }
-            self.onTrackFinished?()
+            Task { @MainActor in
+                self?.onTrackFinished?()
+            }
             return .success
         }
 
         commandCenter.previousTrackCommand.isEnabled = true
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
-            guard let self = self else { return .commandFailed }
-            // Jika sudah lebih dari 3 detik, restart lagu. Jika belum, ganti ke track sebelumnya
-            if self.currentTime > 3.0 {
-                self.seek(to: 0)
-            } else {
-                self.onTrackFinished?()
+            Task { @MainActor in
+                guard let self = self else { return }
+                // Jika sudah lebih dari 3 detik, restart lagu. Jika belum, ganti ke track sebelumnya
+                if self.currentTime > 3.0 {
+                    self.seek(to: 0)
+                } else {
+                    self.onTrackFinished?()
+                }
             }
             return .success
         }
 
         commandCenter.changePlaybackPositionCommand.isEnabled = true
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
-            guard let self = self, let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
+            guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
                 return .commandFailed
             }
-            self.seek(to: positionEvent.positionTime)
+            Task { @MainActor in
+                self?.seek(to: positionEvent.positionTime)
+            }
             return .success
         }
     }
