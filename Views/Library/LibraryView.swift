@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Halaman Koleksi Freetify iOS dengan filter pills, sort bar, dan daftar lagu favorit
 public struct LibraryView: View {

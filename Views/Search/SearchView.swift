@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Halaman Pencarian Freetify dengan header profil Lunkgem, pencarian user profil, dan kategori Supabase
 public struct SearchView: View {

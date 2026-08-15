@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Kontainer navigasi tab utama aplikasi Freetify dengan Sidebar Drawer, Floating Mini Player, dan Liquid Glass Tab Bar
 public struct MainTabView: View {

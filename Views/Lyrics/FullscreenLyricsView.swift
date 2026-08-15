@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Layar Lirik Penuh (Karaoke Synced Lyrics View) dengan auto-scroll dan efek pencahayaan dinamis
 public struct FullscreenLyricsView: View {
@@ -9,6 +10,8 @@ public struct FullscreenLyricsView: View {
     public init() {}
 
     public var body: some View {
+        @Bindable var lyricsBinding = lyricsVM
+
         if let track = playerVM.currentTrack {
             ZStack {
                 // Background Gelap dengan Ambient Artwork Tint
@@ -59,7 +62,7 @@ public struct FullscreenLyricsView: View {
                     bottomToolbar()
                 }
             }
-            .sheet(isPresented: Bindable(lyricsVM).isShareModalPresented) {
+            .sheet(isPresented: $lyricsBinding.isShareModalPresented) {
                 ShareLyricsModal()
             }
         }

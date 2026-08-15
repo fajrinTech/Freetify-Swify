@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Layanan Layar Pemutar Musik Penuh (Now Playing Screen) dengan desain Cyber Vinyl Studio & Ambient Blur
 public struct NowPlayingView: View {
@@ -12,6 +13,9 @@ public struct NowPlayingView: View {
     public init() {}
 
     public var body: some View {
+        @Bindable var playerBinding = playerVM
+        @Bindable var lyricsBinding = lyricsVM
+
         if let track = playerVM.currentTrack {
             ZStack {
                 // 1. Ambient Dynamic Artwork Background
@@ -56,10 +60,10 @@ public struct NowPlayingView: View {
             .onChange(of: playerVM.currentTime) { _, newTime in
                 lyricsVM.updateActiveLine(currentTime: newTime)
             }
-            .sheet(isPresented: Bindable(playerVM).isLyricsFullscreenPresented) {
+            .sheet(isPresented: $playerBinding.isLyricsFullscreenPresented) {
                 FullscreenLyricsView()
             }
-            .sheet(isPresented: Bindable(lyricsVM).isShareModalPresented) {
+            .sheet(isPresented: $lyricsBinding.isShareModalPresented) {
                 ShareLyricsModal()
             }
         }

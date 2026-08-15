@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Titik masuk utama aplikasi Freetify iOS (@main)
 @main

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Modal pratinjau dan kustomisasi kartu stiker lirik sebelum dibagikan ke Instagram Stories
 public struct ShareLyricsModal: View {

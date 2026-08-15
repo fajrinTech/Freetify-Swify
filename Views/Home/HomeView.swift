@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Halaman Beranda Freetify iOS dengan tata letak Cyber Vinyl Studio & Lunkgem UI
 public struct HomeView: View {

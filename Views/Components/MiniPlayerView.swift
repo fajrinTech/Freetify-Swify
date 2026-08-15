@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Floating Mini Player yang melayang tepat di atas TabBar dengan gesture tap untuk membuka layar penuh
 public struct MiniPlayerView: View {

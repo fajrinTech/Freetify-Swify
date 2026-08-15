@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Sidebar Drawer navigasi samping yang menampilkan info profil pengguna, menu pengaturan, kualitas audio, dan logout
 public struct SidebarDrawerView: View {
