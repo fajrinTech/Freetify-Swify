@@ -9,11 +9,18 @@ public final class SupabaseService: Sendable {
         public let anonKey: String
 
         public init(
-            url: String = "https://uzxilupjdtenbuzlmzui.supabase.co",
-            anonKey: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eGlsdXBqZHRlbmJ1emxtenVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTI4ODAsImV4cCI6MjEwMTQ4ODg4MH0.SeCoVstbx0NolCljrwux61JUb6JsqqeMuB9dC82aQh8"
+            url: String? = nil,
+            anonKey: String? = nil
         ) {
-            self.url = url
-            self.anonKey = anonKey
+            let plistURL = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
+            let envURL = ProcessInfo.processInfo.environment["SUPABASE_URL"]
+            let resolvedURL = url ?? plistURL ?? envURL ?? "https://uzxilupjdtenbuzlmzui.supabase.co"
+            self.url = (resolvedURL.isEmpty || resolvedURL.hasPrefix("$(")) ? "https://uzxilupjdtenbuzlmzui.supabase.co" : resolvedURL
+
+            let plistKey = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
+            let envKey = ProcessInfo.processInfo.environment["SUPABASE_ANON_KEY"]
+            let resolvedKey = anonKey ?? plistKey ?? envKey ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eGlsdXBqZHRlbmJ1emxtenVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTI4ODAsImV4cCI6MjEwMTQ4ODg4MH0.SeCoVstbx0NolCljrwux61JUb6JsqqeMuB9dC82aQh8"
+            self.anonKey = (resolvedKey.isEmpty || resolvedKey.hasPrefix("$(")) ? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eGlsdXBqZHRlbmJ1emxtenVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTI4ODAsImV4cCI6MjEwMTQ4ODg4MH0.SeCoVstbx0NolCljrwux61JUb6JsqqeMuB9dC82aQh8" : resolvedKey
         }
     }
 
