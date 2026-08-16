@@ -181,8 +181,8 @@ public struct FullscreenLyricsView: View {
                 lyricsVM.isShareModalPresented = true
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "camera.fill")
-                    Text("Cerita IG")
+                    InstagramIcon(size: 15)
+                    Text("Share")
                 }
                 .font(.system(size: 13, weight: .bold))
                 .foregroundColor(.white)
@@ -196,5 +196,32 @@ public struct FullscreenLyricsView: View {
         .liquidGlassCard(cornerRadius: 24, tint: Color(hex: "151A22").opacity(0.94))
         .padding(.horizontal, 16)
         .padding(.bottom, 18)
+    }
+}
+
+// MARK: - Subview: Instagram Vector Icon
+public struct InstagramIcon: View {
+    public var size: CGFloat = 16
+
+    public init(size: CGFloat = 16) {
+        self.size = size
+    }
+
+    public var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                .stroke(Color.white, lineWidth: max(1.2, size * 0.1))
+                .frame(width: size, height: size)
+
+            Circle()
+                .stroke(Color.white, lineWidth: max(1.2, size * 0.1))
+                .frame(width: size * 0.48, height: size * 0.48)
+
+            Circle()
+                .fill(Color.white)
+                .frame(width: max(1.5, size * 0.12), height: max(1.5, size * 0.12))
+                .offset(x: size * 0.24, y: -size * 0.24)
+        }
+        .frame(width: size, height: size)
     }
 }
