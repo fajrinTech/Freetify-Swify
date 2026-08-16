@@ -405,9 +405,8 @@ public struct HomeView: View {
 
             VStack(spacing: 8) {
                 ForEach(filteredTracks) { track in
-                    Button {
-                        playerVM.play(track: track)
-                    } label: {
+                    HStack(spacing: 12) {
+                        // Area Ketuk untuk Memutar Lagu
                         HStack(spacing: 12) {
                             AsyncImage(url: track.artworkURL) { phase in
                                 switch phase {
@@ -440,31 +439,36 @@ public struct HomeView: View {
                                         .lineLimit(1)
                                 }
                             }
-
-                            Spacer()
-
-                            Button {
-                                playerVM.toggleFavorite(for: track)
-                            } label: {
-                                Image(systemName: track.isFavorite ? "heart.fill" : "heart")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(track.isFavorite ? Color(hex: "00F2FE") : Color(hex: "8B949E"))
-                                    .frame(width: 32, height: 32)
-                            }
-                            .buttonStyle(.plain)
                         }
-                        .padding(12)
-                        .background {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(hex: "161B22"))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                                }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            playerVM.play(track: track)
                         }
-                        .padding(.horizontal, 20)
+
+                        Spacer()
+
+                        // Tombol Favorit Mandiri
+                        Button {
+                            playerVM.toggleFavorite(for: track)
+                        } label: {
+                            Image(systemName: track.isFavorite ? "heart.fill" : "heart")
+                                .font(.system(size: 18))
+                                .foregroundColor(track.isFavorite ? Color(hex: "00F2FE") : Color(hex: "8B949E"))
+                                .frame(width: 32, height: 32)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                    .padding(12)
+                    .background {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color(hex: "161B22"))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                            }
+                    }
+                    .padding(.horizontal, 20)
                 }
             }
         }

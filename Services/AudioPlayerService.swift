@@ -46,6 +46,7 @@ public final class AudioPlayerService: NSObject {
         self.currentTime = 0
 
         removeTimeObserver()
+        removeItemEndObserver()
 
         let playbackURL = track.cachedLocalAudioURL ?? track.audioURL
         let playerItem = AVPlayerItem(url: playbackURL)
@@ -92,7 +93,7 @@ public final class AudioPlayerService: NSObject {
         let validTime = min(time, max(duration, 0.0))
         let cmTime = CMTime(seconds: validTime, preferredTimescale: 600)
         player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self = self else { return }
                 self.currentTime = validTime
                 self.onTimeUpdate?(validTime)
@@ -101,11 +102,12 @@ public final class AudioPlayerService: NSObject {
         }
     }
 
-    // MARK: - Periodic Time Observer
+    // MARK: - Periodic Time Observer (Stabilized with 0.25s interval & MainActor.assumeIsolated)
     private func setupTimeObserver() {
-        let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
-        timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            Task { @MainActor in
+        guard let activePlayer = player else { return }
+        let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
+        timeObserverToken = activePlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            MainActor.assumeIsolated {
                 guard let self = self else { return }
                 let seconds = CMTimeGetSeconds(time)
                 if !seconds.isNaN && !seconds.isInfinite && seconds >= 0 {
@@ -125,26 +127,31 @@ public final class AudioPlayerService: NSObject {
     }
 
     private func removeTimeObserver() {
-        if let token = timeObserverToken {
-            player?.removeTimeObserver(token)
+        if let token = timeObserverToken, let activePlayer = player {
+            activePlayer.removeTimeObserver(token)
             timeObserverToken = nil
         }
     }
 
     private func setupItemEndObserver(for item: AVPlayerItem) {
-        if let itemEndObserver = itemEndObserver {
-            NotificationCenter.default.removeObserver(itemEndObserver)
-        }
+        removeItemEndObserver()
 
         itemEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: item,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self = self else { return }
                 self.onTrackFinished?()
             }
+        }
+    }
+
+    private func removeItemEndObserver() {
+        if let observer = itemEndObserver {
+            NotificationCenter.default.removeObserver(observer)
+            itemEndObserver = nil
         }
     }
 
@@ -198,7 +205,7 @@ public final class AudioPlayerService: NSObject {
 
         commandCenter.playCommand.isEnabled = true
         commandCenter.playCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.play()
             }
             return .success
@@ -206,7 +213,7 @@ public final class AudioPlayerService: NSObject {
 
         commandCenter.pauseCommand.isEnabled = true
         commandCenter.pauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.pause()
             }
             return .success
@@ -214,7 +221,7 @@ public final class AudioPlayerService: NSObject {
 
         commandCenter.togglePlayPauseCommand.isEnabled = true
         commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.togglePlayPause()
             }
             return .success
@@ -222,7 +229,7 @@ public final class AudioPlayerService: NSObject {
 
         commandCenter.nextTrackCommand.isEnabled = true
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.onTrackFinished?()
             }
             return .success
@@ -230,7 +237,7 @@ public final class AudioPlayerService: NSObject {
 
         commandCenter.previousTrackCommand.isEnabled = true
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self = self else { return }
                 if self.currentTime > 3.0 {
                     self.seek(to: 0)
@@ -246,7 +253,7 @@ public final class AudioPlayerService: NSObject {
             guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
                 return .commandFailed
             }
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.seek(to: positionEvent.positionTime)
             }
             return .success
