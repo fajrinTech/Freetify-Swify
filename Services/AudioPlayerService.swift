@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 
-/// Layanan inti pemutar audio native iOS berbasis standar resmi Apple AVFoundation
+/// Layanan inti pemutar audio native iOS berbasis standar resmi Apple AVFoundation dengan transisi Fade-In halus
 @Observable
 @MainActor
 public final class AudioPlayerService {
@@ -10,6 +10,7 @@ public final class AudioPlayerService {
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var itemEndObserver: Any?
+    private var fadeTimer: Timer?
 
     public var currentTrack: Track?
     public var isPlaying: Bool = false
@@ -38,40 +39,43 @@ public final class AudioPlayerService {
 
         setupAudioSession()
 
-        // Hapus observer lama sebelum membuat item baru
-        if let obs = timeObserver, let p = player {
-            p.removeTimeObserver(obs)
-            timeObserver = nil
-        }
+        // Hapus observer item lama
         if let obs = itemEndObserver {
             NotificationCenter.default.removeObserver(obs)
             itemEndObserver = nil
         }
 
         let playerItem = AVPlayerItem(url: track.audioURL)
-        let newPlayer = AVPlayer(playerItem: playerItem)
-        newPlayer.automaticallyWaitsToMinimizeStalling = true
-        self.player = newPlayer
+        playerItem.preferredForwardBufferDuration = 10.0
 
-        // Interval 0.2s untuk sinkronisasi lirik karaoke yang responsif dan presisi
-        let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
-        self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            MainActor.assumeIsolated {
-                guard let self = self else { return }
-                let sec = CMTimeGetSeconds(time)
-                if sec.isFinite && sec >= 0 {
-                    self.currentTime = sec
-                }
-                if let item = self.player?.currentItem {
-                    let d = CMTimeGetSeconds(item.duration)
-                    if d.isFinite && d > 0 {
-                        self.duration = d
+        if let existingPlayer = player {
+            existingPlayer.replaceCurrentItem(with: playerItem)
+            existingPlayer.automaticallyWaitsToMinimizeStalling = false
+        } else {
+            let newPlayer = AVPlayer(playerItem: playerItem)
+            newPlayer.automaticallyWaitsToMinimizeStalling = false
+            self.player = newPlayer
+
+            // Observer waktu diatur satu kali untuk instance player
+            let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
+            self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+                MainActor.assumeIsolated {
+                    guard let self = self else { return }
+                    let sec = CMTimeGetSeconds(time)
+                    if sec.isFinite && sec >= 0 {
+                        self.currentTime = sec
+                    }
+                    if let item = self.player?.currentItem {
+                        let d = CMTimeGetSeconds(item.duration)
+                        if d.isFinite && d > 0 {
+                            self.duration = d
+                        }
                     }
                 }
             }
         }
 
-        // Auto-play lagu selanjutnya saat lagu ini selesai
+        // Auto-play lagu selanjutnya saat lagu selesai
         self.itemEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
@@ -83,17 +87,20 @@ public final class AudioPlayerService {
             }
         }
 
-        newPlayer.play()
+        // Putar audio dengan transisi Fade-In yang lembut dan elegan
+        fadeInAudio(duration: 0.35)
         self.isPlaying = true
     }
 
     public func play() {
         setupAudioSession()
-        player?.play()
+        fadeInAudio(duration: 0.25)
         self.isPlaying = true
     }
 
     public func pause() {
+        fadeTimer?.invalidate()
+        fadeTimer = nil
         player?.pause()
         self.isPlaying = false
     }
@@ -111,5 +118,35 @@ public final class AudioPlayerService {
         self.currentTime = seconds
         let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
         player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    // MARK: - Smooth Audio Fade-In Swell
+    private func fadeInAudio(duration: TimeInterval) {
+        fadeTimer?.invalidate()
+        fadeTimer = nil
+
+        guard let activePlayer = player else { return }
+        activePlayer.volume = 0.0
+        activePlayer.play()
+
+        let totalSteps = 15
+        let stepInterval = duration / Double(totalSteps)
+        var step = 0
+
+        fadeTimer = Timer.scheduledTimer(withTimeInterval: stepInterval, repeats: true) { [weak self, weak activePlayer] timer in
+            guard let self = self, let p = activePlayer else {
+                timer.invalidate()
+                return
+            }
+            step += 1
+            let progress = Float(step) / Float(totalSteps)
+            p.volume = min(1.0, progress)
+
+            if step >= totalSteps {
+                p.volume = 1.0
+                timer.invalidate()
+                self.fadeTimer = nil
+            }
+        }
     }
 }
