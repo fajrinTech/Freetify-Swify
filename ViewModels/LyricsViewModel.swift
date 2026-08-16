@@ -26,29 +26,39 @@ public final class LyricsViewModel {
         }
 
         currentLoadedTrackID = track.id
-        self.lines = [] // Reset lirik lagu sebelumnya seketika agar tidak tercampur
+        self.lines = [] // Reset lirik seketika agar tidak tercampur
         self.selectedLines = []
         self.activeLineIndex = 0
 
-        // 1. Cek lirik yang sudah tersemat langsung di model Track
-        if let lrc = track.lyricsLRC, !lrc.isEmpty {
-            self.lines = LRCParser.parse(lrc)
-            return
+        // 1. Cek lirik yang sudah tersemat langsung di model Track (hanya jika format LRC valid)
+        if let lrc = track.lyricsLRC, !lrc.isEmpty, isFormatValidLRC(lrc) {
+            let parsed = LRCParser.parse(lrc)
+            if !parsed.isEmpty {
+                self.lines = parsed
+                return
+            }
         }
 
-        // 2. Cek cache lokal
-        if let cachedLrc = cacheService.getCachedLyrics(trackID: track.id) {
-            self.lines = LRCParser.parse(cachedLrc)
-            return
+        // 2. Cek cache lokal v3
+        if let cachedLrc = cacheService.getCachedLyrics(trackID: track.id), isFormatValidLRC(cachedLrc) {
+            let parsed = LRCParser.parse(cachedLrc)
+            if !parsed.isEmpty {
+                self.lines = parsed
+                return
+            }
         }
 
         // 3. Fallback: Ambil secara live dari LRCLIB API
         isLoading = true
         if let fetchedLrc = await lrclibService.fetchLyrics(title: track.title, artist: track.artist, duration: track.duration) {
-            // Pastikan track yang sedang dimuat masih sama saat respons tiba
             if currentLoadedTrackID == track.id {
-                self.lines = LRCParser.parse(fetchedLrc)
-                cacheService.cacheLyrics(trackID: track.id, lrcText: fetchedLrc)
+                let parsed = LRCParser.parse(fetchedLrc)
+                if !parsed.isEmpty {
+                    self.lines = parsed
+                    cacheService.cacheLyrics(trackID: track.id, lrcText: fetchedLrc)
+                } else {
+                    self.lines = []
+                }
             }
         } else {
             if currentLoadedTrackID == track.id {
@@ -56,6 +66,11 @@ public final class LyricsViewModel {
             }
         }
         isLoading = false
+    }
+
+    /// Validasi apakah teks mengandung timestamp standar LRC [mm:ss]
+    private func isFormatValidLRC(_ text: String) -> Bool {
+        return text.contains("[00:") || text.contains("[01:") || text.contains("[02:") || text.contains("[03:") || text.contains("[04:")
     }
 
     /// Memperbarui indeks baris lirik yang sedang aktif sesuai detik lagu yang dimainkan
@@ -87,7 +102,6 @@ public final class LyricsViewModel {
         } else {
             if selectedLines.count < 5 {
                 selectedLines.append(line)
-                // Urutkan kembali sesuai timestamp aslinya
                 selectedLines.sort { $0.time < $1.time }
             }
         }
