@@ -65,6 +65,7 @@ public final class AudioPlayerService: NSObject {
     }
 
     public func play() {
+        setupAudioSession()
         player?.play()
         isPlaying = true
         onPlaybackStateChanged?(true)
@@ -152,13 +153,14 @@ public final class AudioPlayerService: NSObject {
         let validDuration = (duration > 0 && !duration.isNaN && !duration.isInfinite) ? duration : (track.duration > 0 ? track.duration : 180.0)
         let validCurrentTime = (!currentTime.isNaN && !currentTime.isInfinite && currentTime >= 0) ? currentTime : 0.0
 
-        let nowPlayingInfo: [String: Any] = [
+        var nowPlayingInfo: [String: Any] = [
             MPMediaItemPropertyTitle: track.title,
             MPMediaItemPropertyArtist: track.artist,
             MPMediaItemPropertyAlbumTitle: track.album,
             MPMediaItemPropertyPlaybackDuration: validDuration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: validCurrentTime,
-            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue
         ]
 
         if let artworkURL = track.artworkURL {
@@ -166,7 +168,12 @@ public final class AudioPlayerService: NSObject {
                 if let (data, _) = try? await URLSession.shared.data(from: artworkURL),
                    let image = UIImage(data: data),
                    image.size.width > 0 && image.size.height > 0 {
-                    let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                    let targetSize = CGSize(width: min(image.size.width, 300), height: min(image.size.height, 300))
+                    let renderer = UIGraphicsImageRenderer(size: targetSize)
+                    let resizedImage = renderer.image { _ in
+                        image.draw(in: CGRect(origin: .zero, size: targetSize))
+                    }
+                    let artwork = MPMediaItemArtwork(boundsSize: targetSize) { _ in resizedImage }
                     var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? nowPlayingInfo
                     info[MPMediaItemPropertyArtwork] = artwork
                     MPNowPlayingInfoCenter.default().nowPlayingInfo = info

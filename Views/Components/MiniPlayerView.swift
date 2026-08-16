@@ -9,12 +9,10 @@ public struct MiniPlayerView: View {
 
     public var body: some View {
         if let track = playerVM.currentTrack {
-            Button {
-                playerVM.isNowPlayingPresented = true
-            } label: {
-                VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    // Artwork Gambar & Info Lagu (Ketuk untuk Buka Layar Penuh)
                     HStack(spacing: 12) {
-                        // Artwork Gambar
                         AsyncImage(url: track.artworkURL) { phase in
                             switch phase {
                             case .success(let image):
@@ -46,56 +44,61 @@ public struct MiniPlayerView: View {
                                 .foregroundColor(.white.opacity(0.7))
                                 .lineLimit(1)
                         }
-
-                        Spacer(minLength: 8)
-
-                        // Tombol Favorit
-                        Button {
-                            playerVM.toggleFavorite(for: track)
-                        } label: {
-                            Image(systemName: track.isFavorite ? "heart.fill" : "heart")
-                                .font(.system(size: 18))
-                                .foregroundColor(track.isFavorite ? Color(hex: "1DB954") : .white.opacity(0.7))
-                                .frame(width: 36, height: 36)
-                        }
-                        .buttonStyle(.plain)
-
-                        // Tombol Play / Pause
-                        Button {
-                            playerVM.togglePlayPause()
-                        } label: {
-                            Image(systemName: playerVM.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
-                                .frame(width: 36, height: 36)
-                        }
-                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-
-                    // Garis Progres Pemutaran Tipis di Bawah (Aman dari NaN / Infinity)
-                    GeometryReader { geo in
-                        let validProgress = max(0.0, min(playerVM.progress, 1.0))
-                        let barWidth = max(0.0, min(geo.size.width * CGFloat(validProgress), geo.size.width))
-
-                        ZStack(alignment: .leading) {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.15))
-                                .frame(height: 2)
-
-                            Rectangle()
-                                .fill(Color.white)
-                                .frame(width: barWidth, height: 2)
-                        }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        playerVM.isNowPlayingPresented = true
                     }
-                    .frame(height: 2)
+
+                    Spacer(minLength: 8)
+
+                    // Tombol Favorit Independen
+                    Button {
+                        playerVM.toggleFavorite(for: track)
+                    } label: {
+                        Image(systemName: track.isFavorite ? "heart.fill" : "heart")
+                            .font(.system(size: 18))
+                            .foregroundColor(track.isFavorite ? Color(hex: "00F2FE") : .white.opacity(0.7))
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    // Tombol Play / Pause Independen
+                    Button {
+                        playerVM.togglePlayPause()
+                    } label: {
+                        Image(systemName: playerVM.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .liquidGlassCard(cornerRadius: 16, tint: Color(hex: "1E232B").opacity(0.92))
-                .padding(.horizontal, 16)
-                .shadow(color: Color.black.opacity(0.3), radius: 12, x: 0, y: 6)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+
+                // Garis Progres Pemutaran Tipis di Bawah (Aman dari NaN / Bounds Clamp)
+                GeometryReader { geo in
+                    let validProgress = max(0.0, min(playerVM.progress, 1.0))
+                    let barWidth = max(0.0, min(geo.size.width * CGFloat(validProgress), geo.size.width))
+
+                    ZStack(alignment: .leading) {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.15))
+                            .frame(height: 2)
+
+                        Rectangle()
+                            .fill(Color(hex: "00F2FE"))
+                            .frame(width: barWidth, height: 2)
+                    }
+                }
+                .frame(height: 2)
             }
-            .buttonStyle(.plain)
+            .liquidGlassCard(cornerRadius: 16, tint: Color(hex: "12161E").opacity(0.92))
+            .padding(.horizontal, 16)
+            .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 6)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

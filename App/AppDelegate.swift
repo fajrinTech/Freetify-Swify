@@ -14,10 +14,10 @@ public final class AppDelegate: NSObject, UIApplicationDelegate {
     private func configureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
+            try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
         } catch {
-            print("[AppDelegate] Gagal mengonfigurasi AVAudioSession background mode: \(error)")
+            print("[AppDelegate] Gagal mengonfigurasi AVAudioSession: \(error.localizedDescription)")
         }
     }
 }
