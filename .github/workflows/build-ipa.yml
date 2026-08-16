@@ -24,9 +24,6 @@ jobs:
         run: xcodegen generate
 
       - name: Build Xcode Archive
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           xcodebuild -project Freetify.xcodeproj \
             -scheme "Freetify v1" \
@@ -34,8 +31,6 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath build/Freetify.xcarchive \
-            SUPABASE_URL="${SUPABASE_URL}" \
-            SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \

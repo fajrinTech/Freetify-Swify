@@ -5,6 +5,9 @@ public final class SupabaseService: Sendable {
     public static let shared = SupabaseService()
 
     public struct SupabaseConfig: Sendable {
+        public static let defaultURL = "https://uzxilupjdtenbuzlmzui.supabase.co"
+        public static let defaultAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eGlsdXBqZHRlbmJ1emxtenVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTI4ODAsImV4cCI6MjEwMTQ4ODg4MH0.SeCoVstbx0NolCljrwux61JUb6JsqqeMuB9dC82aQh8"
+
         public let url: String
         public let anonKey: String
 
@@ -14,13 +17,19 @@ public final class SupabaseService: Sendable {
         ) {
             let plistURL = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
             let envURL = ProcessInfo.processInfo.environment["SUPABASE_URL"]
-            let resolvedURL = url ?? plistURL ?? envURL ?? "https://uzxilupjdtenbuzlmzui.supabase.co"
-            self.url = (resolvedURL.isEmpty || resolvedURL.hasPrefix("$(")) ? "https://uzxilupjdtenbuzlmzui.supabase.co" : resolvedURL
+            let candidateURL = [url, plistURL, envURL].compactMap { $0 }.first(where: {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !trimmed.isEmpty && !trimmed.contains("$")
+            })
+            self.url = candidateURL ?? Self.defaultURL
 
             let plistKey = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
             let envKey = ProcessInfo.processInfo.environment["SUPABASE_ANON_KEY"]
-            let resolvedKey = anonKey ?? plistKey ?? envKey ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eGlsdXBqZHRlbmJ1emxtenVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTI4ODAsImV4cCI6MjEwMTQ4ODg4MH0.SeCoVstbx0NolCljrwux61JUb6JsqqeMuB9dC82aQh8"
-            self.anonKey = (resolvedKey.isEmpty || resolvedKey.hasPrefix("$(")) ? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eGlsdXBqZHRlbmJ1emxtenVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTI4ODAsImV4cCI6MjEwMTQ4ODg4MH0.SeCoVstbx0NolCljrwux61JUb6JsqqeMuB9dC82aQh8" : resolvedKey
+            let candidateKey = [anonKey, plistKey, envKey].compactMap { $0 }.first(where: {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !trimmed.isEmpty && !trimmed.contains("$")
+            })
+            self.anonKey = candidateKey ?? Self.defaultAnonKey
         }
     }
 
@@ -55,11 +64,12 @@ public final class SupabaseService: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(config.anonKey)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 12.0
+        request.timeoutInterval = 15.0
 
         do {
             let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+                print("[SupabaseService] HTTP Error code: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
                 return Track.samples
             }
 
