@@ -28,13 +28,6 @@ public final class AudioPlayerService: NSObject {
         setupRemoteCommands()
     }
 
-    deinit {
-        removeTimeObserver()
-        if let itemEndObserver = itemEndObserver {
-            NotificationCenter.default.removeObserver(itemEndObserver)
-        }
-    }
-
     // MARK: - Audio Session Setup
     public func setupAudioSession() {
         do {
