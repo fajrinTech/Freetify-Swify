@@ -240,19 +240,16 @@ public struct ShareLyricsModal: View {
     private func saveImageToPhotos() {
         guard let image = renderLyricImage() else { return }
 
-        let photoSaver = PhotoSaver()
-        photoSaver.onSuccess = {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation {
+            showSavedToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             withAnimation {
-                showSavedToast = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                withAnimation {
-                    showSavedToast = false
-                }
+                showSavedToast = false
             }
         }
-        photoSaver.save(image: image)
     }
 
     @MainActor
@@ -275,23 +272,6 @@ public struct ShareLyricsModal: View {
             }
 
             topVC.present(activityVC, animated: true)
-        }
-    }
-}
-
-// MARK: - PhotoSaver Helper
-final class PhotoSaver: NSObject {
-    var onSuccess: (() -> Void)?
-
-    func save(image: UIImage) {
-        UIImageWriteToSavedPhotosAlbum(image, self, #selector(saveCompleted(_:didFinishSavingWithError:contextInfo:)), nil)
-    }
-
-    @objc func saveCompleted(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
-        if error == nil {
-            DispatchQueue.main.async {
-                self.onSuccess?()
-            }
         }
     }
 }
