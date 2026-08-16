@@ -22,11 +22,11 @@ public final class LRCLIBService: Sendable {
 
     /// Mengambil string LRC dari LRCLIB berdasarkan judul dan nama artis
     public func fetchLyrics(title: String, artist: String) async -> String? {
-        let query = "\(title) \(artist)"
-        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://lrclib.net/api/search?q=\(encodedQuery)") else {
-            return nil
-        }
+        var components = URLComponents(string: "https://lrclib.net/api/search")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: "\(title) \(artist)")
+        ]
+        guard let url = components?.url else { return nil }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"

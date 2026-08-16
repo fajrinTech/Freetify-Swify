@@ -76,7 +76,7 @@ public final class SupabaseService: Sendable {
                     return nil
                 }
 
-                let artworkURL = row.coverPath != nil ? URL(string: row.coverPath!) : nil
+                let artworkURL = row.coverPath.flatMap { URL(string: $0) }
 
                 return Track(
                     id: row.id,
