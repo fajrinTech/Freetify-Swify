@@ -1,13 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// Modal pratinjau dan kustomisasi kartu stiker lirik sebelum dibagikan ke Instagram Stories
+/// Modal pratinjau dan kustomisasi kartu stiker lirik sebelum dibagikan ke Instagram Stories / disimpan ke Galeri
 public struct ShareLyricsModal: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(LyricsViewModel.self) private var lyricsVM
     @Environment(PlayerViewModel.self) private var playerVM
 
-    @State private var showConfirmAlert: Bool = false
+    @State private var showSavedToast: Bool = false
+    @State private var saveErrorMessage: String? = nil
 
     public init() {}
 
@@ -26,7 +27,7 @@ public struct ShareLyricsModal: View {
 
                             Text("\(lyricsVM.selectedLines.count)/5 baris dipilih")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(Color(hex: "1DB954"))
+                                .foregroundColor(Color(hex: "00F2FE"))
                         }
                         .padding(.top, 8)
 
@@ -92,7 +93,7 @@ public struct ShareLyricsModal: View {
                                         HStack(alignment: .top, spacing: 12) {
                                             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                                                 .font(.system(size: 18))
-                                                .foregroundColor(isSelected ? Color(hex: "1DB954") : .white.opacity(0.3))
+                                                .foregroundColor(isSelected ? Color(hex: "00F2FE") : .white.opacity(0.3))
                                                 .padding(.top, 2)
 
                                             Text(line.text)
@@ -119,37 +120,89 @@ public struct ShareLyricsModal: View {
 
                         Spacer(minLength: 40)
                     }
-                    .padding(.bottom, 100)
+                    .padding(.bottom, 120)
                 }
 
-                // Floating Action Button di Bawah: "Cerita IG"
+                // Toast Notifikasi Tersimpan di Galeri
+                if showSavedToast {
+                    VStack {
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(Color(hex: "00F2FE"))
+                                .font(.system(size: 20))
+                            Text("Tersimpan di Galeri Foto")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Capsule().fill(Color(hex: "1F2937").opacity(0.95)))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.2), lineWidth: 1))
+                        .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 6)
+                        .padding(.top, 20)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+
+                        Spacer()
+                    }
+                    .animation(.spring(response: 0.35, dampingFraction: 0.75), value: showSavedToast)
+                }
+
+                // Bottom Action Bar: Tombol Simpan Foto & Tombol Bagikan
                 VStack {
                     Spacer()
-                    Button {
-                        showConfirmAlert = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("Cerita IG")
-                                .font(.system(size: 16, weight: .bold))
+                    HStack(spacing: 12) {
+                        // Tombol 1: Simpan ke Galeri Foto
+                        Button {
+                            saveImageToPhotos()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.down.to.line.compact")
+                                    .font(.system(size: 15, weight: .bold))
+                                Text("Simpan Foto")
+                                    .font(.system(size: 14, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(Color.white.opacity(0.12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                                    )
+                            }
                         }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background {
-                            Capsule()
-                                .fill(LinearGradient(
-                                    colors: [Color(hex: "E1306C"), Color(hex: "833AB4")],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                ))
+                        .disabled(lyricsVM.selectedLines.isEmpty)
+                        .opacity(lyricsVM.selectedLines.isEmpty ? 0.4 : 1.0)
+
+                        // Tombol 2: Universal iOS Share Sheet
+                        Button {
+                            presentNativeShareSheet()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 15, weight: .bold))
+                                Text("Bagikan...")
+                                    .font(.system(size: 14, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(LinearGradient(
+                                        colors: [Color(hex: "E1306C"), Color(hex: "833AB4")],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ))
+                                    .shadow(color: Color(hex: "E1306C").opacity(0.4), radius: 10, x: 0, y: 4)
+                            }
                         }
-                        .padding(.horizontal, 24)
-                        .shadow(color: Color(hex: "E1306C").opacity(0.4), radius: 12, x: 0, y: 6)
+                        .disabled(lyricsVM.selectedLines.isEmpty)
+                        .opacity(lyricsVM.selectedLines.isEmpty ? 0.4 : 1.0)
                     }
-                    .disabled(lyricsVM.selectedLines.isEmpty)
-                    .opacity(lyricsVM.selectedLines.isEmpty ? 0.5 : 1.0)
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 16)
                 }
             }
@@ -163,39 +216,82 @@ public struct ShareLyricsModal: View {
                     .foregroundColor(.white)
                 }
             }
-            .alert("Buka Instagram?", isPresented: $showConfirmAlert) {
-                Button("Buka", role: .none) {
-                    exportAndShareToInstagram()
-                }
-                Button("Batal", role: .cancel) {}
-            } message: {
-                Text("Freetify ingin membuka aplikasi Instagram untuk membagikan kartu lirik ke Cerita Anda.")
-            }
         }
     }
 
+    // MARK: - Actions
     @MainActor
-    private func exportAndShareToInstagram() {
-        guard let track = playerVM.currentTrack else { return }
+    private func renderLyricImage() -> UIImage? {
+        guard let track = playerVM.currentTrack else { return nil }
 
-        // Render View menjadi Gambar UIImage
         let stickerView = LyricsStickerPreviewCard(
             track: track,
             lines: lyricsVM.selectedLines,
             palette: lyricsVM.selectedPalette
         )
-        .frame(width: 320)
+        .frame(width: 340)
 
         let renderer = ImageRenderer(content: stickerView)
         renderer.scale = UIScreen.main.scale
+        return renderer.uiImage
+    }
 
-        if let image = renderer.uiImage {
-            InstagramShareService.shared.shareLyricsToInstagramStories(
-                stickerImage: image,
-                palette: lyricsVM.selectedPalette,
-                track: track
-            )
-            dismiss()
+    @MainActor
+    private func saveImageToPhotos() {
+        guard let image = renderLyricImage() else { return }
+
+        let photoSaver = PhotoSaver()
+        photoSaver.onSuccess = {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            withAnimation {
+                showSavedToast = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                withAnimation {
+                    showSavedToast = false
+                }
+            }
+        }
+        photoSaver.save(image: image)
+    }
+
+    @MainActor
+    private func presentNativeShareSheet() {
+        guard let image = renderLyricImage() else { return }
+
+        let activityVC = UIActivityViewController(activityItems: [image], applicationActivities: nil)
+
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = scene.windows.first?.rootViewController {
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController {
+                topVC = presented
+            }
+
+            if let popover = activityVC.popoverPresentationController {
+                popover.sourceView = topVC.view
+                popover.sourceRect = CGRect(x: topVC.view.bounds.midX, y: topVC.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+
+            topVC.present(activityVC, animated: true)
+        }
+    }
+}
+
+// MARK: - PhotoSaver Helper
+final class PhotoSaver: NSObject {
+    var onSuccess: (() -> Void)?
+
+    func save(image: UIImage) {
+        UIImageWriteToSavedPhotosAlbum(image, self, #selector(saveCompleted(_:didFinishSavingWithError:contextInfo:)), nil)
+    }
+
+    @objc func saveCompleted(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
+        if error == nil {
+            DispatchQueue.main.async {
+                self.onSuccess?()
+            }
         }
     }
 }
