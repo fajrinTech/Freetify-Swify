@@ -6,13 +6,8 @@ import Observation
 @Observable
 @MainActor
 public final class PlayerViewModel {
-    public var currentTrack: Track?
     public var queue: [Track] = []
     public var queueIndex: Int = 0
-
-    public var isPlaying: Bool = false
-    public var currentTime: TimeInterval = 0
-    public var duration: TimeInterval = 180.0
 
     public var isShuffleEnabled: Bool = false
     public var isRepeatEnabled: Bool = false
@@ -23,30 +18,22 @@ public final class PlayerViewModel {
     private let audioService = AudioPlayerService.shared
     private let cacheService = LocalCacheService.shared
 
-    public init() {
-        setupBindings()
+    public init() {}
+
+    public var currentTrack: Track? {
+        audioService.currentTrack
     }
 
-    private func setupBindings() {
-        audioService.onTimeUpdate = { [weak self] time in
-            guard let self = self, !time.isNaN && !time.isInfinite && time >= 0 else { return }
-            self.currentTime = time
-        }
+    public var isPlaying: Bool {
+        audioService.isPlaying
+    }
 
-        audioService.onDurationUpdate = { [weak self] dur in
-            guard let self = self, !dur.isNaN && !dur.isInfinite && dur > 0 else { return }
-            self.duration = dur
-        }
+    public var currentTime: TimeInterval {
+        audioService.currentTime
+    }
 
-        audioService.onPlaybackStateChanged = { [weak self] playing in
-            guard let self = self else { return }
-            self.isPlaying = playing
-        }
-
-        audioService.onTrackFinished = { [weak self] in
-            guard let self = self else { return }
-            self.handleTrackFinished()
-        }
+    public var duration: TimeInterval {
+        audioService.duration
     }
 
     // MARK: - Playback Commands
@@ -57,9 +44,6 @@ public final class PlayerViewModel {
             queue = [track]
             queueIndex = 0
         }
-        currentTrack = track
-        duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
-        currentTime = 0
         audioService.loadAndPlay(track: track)
     }
 
@@ -68,9 +52,6 @@ public final class PlayerViewModel {
         self.queue = tracks
         self.queueIndex = max(0, min(startIndex, tracks.count - 1))
         let track = tracks[queueIndex]
-        self.currentTrack = track
-        self.duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
-        self.currentTime = 0
         audioService.loadAndPlay(track: track)
     }
 
@@ -117,15 +98,6 @@ public final class PlayerViewModel {
         }
     }
 
-    private func handleTrackFinished() {
-        if isRepeatEnabled {
-            seek(toSeconds: 0)
-            audioService.play()
-        } else {
-            nextTrack()
-        }
-    }
-
     public func toggleShuffle() {
         isShuffleEnabled.toggle()
     }
@@ -137,7 +109,7 @@ public final class PlayerViewModel {
     public func toggleFavorite(for track: Track) {
         let isFav = cacheService.toggleFavorite(trackID: track.id)
         if currentTrack?.id == track.id {
-            currentTrack?.isFavorite = isFav
+            audioService.currentTrack?.isFavorite = isFav
         }
         if let idx = queue.firstIndex(where: { $0.id == track.id }) {
             queue[idx].isFavorite = isFav
