@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Apple Liquid Glass & Material Fallback Modifiers
+// MARK: - Apple Ultra-Realistic Liquid Glass & Material Modifiers
 
 public struct LiquidGlassCardModifier: ViewModifier {
     public var cornerRadius: CGFloat
@@ -9,7 +9,7 @@ public struct LiquidGlassCardModifier: ViewModifier {
 
     public init(
         cornerRadius: CGFloat = 24,
-        tintColor: Color = Color.white.opacity(0.1),
+        tintColor: Color = Color.white.opacity(0.08),
         borderGradient: LinearGradient = LinearGradient(
             colors: [.white.opacity(0.4), .white.opacity(0.08)],
             startPoint: .topLeading,
@@ -30,6 +30,15 @@ public struct LiquidGlassCardModifier: ViewModifier {
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .fill(tintColor)
                     }
+                    .overlay {
+                        // Specular Top Light Reflection
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.14), Color.clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    }
             }
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -43,9 +52,9 @@ public struct LiquidGlassCapsuleModifier: ViewModifier {
     public var borderGradient: LinearGradient
 
     public init(
-        tintColor: Color = Color(hex: "12161C").opacity(0.85),
+        tintColor: Color = Color(hex: "0D1117").opacity(0.82),
         borderGradient: LinearGradient = LinearGradient(
-            colors: [.white.opacity(0.35), .white.opacity(0.08)],
+            colors: [.white.opacity(0.45), .white.opacity(0.12)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -63,6 +72,15 @@ public struct LiquidGlassCapsuleModifier: ViewModifier {
                         Capsule()
                             .fill(tintColor)
                     }
+                    .overlay {
+                        // Specular Light Sheen di bagian atas capsule
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.20), Color.clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                        .clipShape(Capsule())
+                    }
             }
             .overlay {
                 Capsule()
@@ -73,7 +91,7 @@ public struct LiquidGlassCapsuleModifier: ViewModifier {
 
 // MARK: - View Extension for Liquid Glass
 extension View {
-    /// Menerapkan efek Liquid Glass Card dengan pembatas melengkung dan border gradient optik
+    /// Menerapkan efek Liquid Glass Card dengan specular highlight dan border gradient optik
     public func liquidGlassCard(
         cornerRadius: CGFloat = 24,
         tint: Color = Color.white.opacity(0.08)
@@ -81,9 +99,9 @@ extension View {
         self.modifier(LiquidGlassCardModifier(cornerRadius: cornerRadius, tintColor: tint))
     }
 
-    /// Menerapkan efek Liquid Glass Capsule untuk TabBar dan Floating Pill Buttons
+    /// Menerapkan efek Ultra Floating Liquid Glass Capsule untuk TabBar dan Floating Buttons
     public func liquidGlassCapsule(
-        tint: Color = Color(hex: "12161C").opacity(0.85)
+        tint: Color = Color(hex: "0D1117").opacity(0.82)
     ) -> some View {
         self.modifier(LiquidGlassCapsuleModifier(tintColor: tint))
     }
