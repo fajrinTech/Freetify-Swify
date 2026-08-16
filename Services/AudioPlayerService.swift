@@ -3,7 +3,7 @@ import AVFoundation
 import MediaPlayer
 import UIKit
 
-/// Layanan inti pemutar audio native iOS dengan dukungan Background Mode, Lock Screen, dan Remote Commands
+/// Layanan inti pemutar audio native iOS dengan dukungan Background Playback, Lock Screen, dan Remote Controls
 @MainActor
 public final class AudioPlayerService: NSObject {
     public static let shared = AudioPlayerService()
@@ -32,30 +32,31 @@ public final class AudioPlayerService: NSObject {
     public func setupAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
+            try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
         } catch {
-            print("[AudioPlayerService] Failed to set AVAudioSession category: \(error.localizedDescription)")
+            print("[AudioPlayerService] AudioSession setup error: \(error.localizedDescription)")
         }
     }
 
     // MARK: - Playback Controls
     public func loadAndPlay(track: Track) {
         self.currentTrack = track
-        self.duration = track.duration
+        self.duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
+        self.currentTime = 0
 
         removeTimeObserver()
 
-        // Prioritaskan file audio lokal jika sudah di-cache
         let playbackURL = track.cachedLocalAudioURL ?? track.audioURL
         let playerItem = AVPlayerItem(url: playbackURL)
 
-        if player == nil {
-            player = AVPlayer(playerItem: playerItem)
+        if let existingPlayer = player {
+            existingPlayer.replaceCurrentItem(with: playerItem)
         } else {
-            player?.replaceCurrentItem(with: playerItem)
+            player = AVPlayer(playerItem: playerItem)
         }
 
+        player?.automaticallyWaitsToMinimizeStalling = true
         setupTimeObserver()
         setupItemEndObserver(for: playerItem)
 
@@ -86,12 +87,14 @@ public final class AudioPlayerService: NSObject {
     }
 
     public func seek(to time: TimeInterval) {
-        let cmTime = CMTime(seconds: time, preferredTimescale: 600)
+        guard !time.isNaN && !time.isInfinite && time >= 0 else { return }
+        let validTime = min(time, max(duration, 0.0))
+        let cmTime = CMTime(seconds: validTime, preferredTimescale: 600)
         player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
             Task { @MainActor in
                 guard let self = self else { return }
-                self.currentTime = time
-                self.onTimeUpdate?(time)
+                self.currentTime = validTime
+                self.onTimeUpdate?(validTime)
                 self.updatePlaybackStateInNowPlaying()
             }
         }
@@ -99,24 +102,20 @@ public final class AudioPlayerService: NSObject {
 
     // MARK: - Periodic Time Observer
     private func setupTimeObserver() {
-        // Observasi setiap 50 milidetik untuk sinkronisasi lirik yang sangat mulus
-        let interval = CMTime(seconds: 0.05, preferredTimescale: 600)
+        let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
         timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            Task { @MainActor in
-                guard let self = self else { return }
-                let seconds = CMTimeGetSeconds(time)
-                if !seconds.isNaN && !seconds.isInfinite {
-                    self.currentTime = seconds
-                    self.onTimeUpdate?(seconds)
+            guard let self = self else { return }
+            let seconds = CMTimeGetSeconds(time)
+            if !seconds.isNaN && !seconds.isInfinite && seconds >= 0 {
+                self.currentTime = seconds
+                self.onTimeUpdate?(seconds)
+            }
 
-                    // Update durasi aktual jika tersedia dari AVPlayerItem
-                    if let currentItem = self.player?.currentItem {
-                        let itemDuration = CMTimeGetSeconds(currentItem.duration)
-                        if !itemDuration.isNaN && !itemDuration.isInfinite && itemDuration > 0 {
-                            self.duration = itemDuration
-                            self.onDurationUpdate?(itemDuration)
-                        }
-                    }
+            if let item = self.player?.currentItem {
+                let itemDuration = CMTimeGetSeconds(item.duration)
+                if !itemDuration.isNaN && !itemDuration.isInfinite && itemDuration > 0 {
+                    self.duration = itemDuration
+                    self.onDurationUpdate?(itemDuration)
                 }
             }
         }
@@ -148,23 +147,27 @@ public final class AudioPlayerService: NSObject {
 
     // MARK: - MPNowPlayingInfoCenter (Lock Screen & Dynamic Island)
     private func updateNowPlayingInfo(track: Track) {
+        let validDuration = (duration > 0 && !duration.isNaN && !duration.isInfinite) ? duration : (track.duration > 0 ? track.duration : 180.0)
+        let validCurrentTime = (!currentTime.isNaN && !currentTime.isInfinite && currentTime >= 0) ? currentTime : 0.0
+
         var nowPlayingInfo: [String: Any] = [
             MPMediaItemPropertyTitle: track.title,
             MPMediaItemPropertyArtist: track.artist,
             MPMediaItemPropertyAlbumTitle: track.album,
-            MPMediaItemPropertyPlaybackDuration: track.duration,
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
+            MPMediaItemPropertyPlaybackDuration: validDuration,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: validCurrentTime,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]
 
-        // Load Artwork secara asinkron
         if let artworkURL = track.artworkURL {
-            Task {
+            Task { @MainActor in
                 if let (data, _) = try? await URLSession.shared.data(from: artworkURL),
-                   let image = UIImage(data: data) {
+                   let image = UIImage(data: data),
+                   image.size.width > 0 && image.size.height > 0 {
                     let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                    nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+                    var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? nowPlayingInfo
+                    info[MPMediaItemPropertyArtwork] = artwork
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
                 }
             }
         }
@@ -174,7 +177,8 @@ public final class AudioPlayerService: NSObject {
 
     private func updatePlaybackStateInNowPlaying() {
         guard var info = MPNowPlayingInfoCenter.default().nowPlayingInfo else { return }
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+        let validCurrentTime = (!currentTime.isNaN && !currentTime.isInfinite && currentTime >= 0) ? currentTime : 0.0
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = validCurrentTime
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
@@ -219,7 +223,6 @@ public final class AudioPlayerService: NSObject {
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor in
                 guard let self = self else { return }
-                // Jika sudah lebih dari 3 detik, restart lagu. Jika belum, ganti ke track sebelumnya
                 if self.currentTime > 3.0 {
                     self.seek(to: 0)
                 } else {

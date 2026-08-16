@@ -199,6 +199,10 @@ public struct NowPlayingView: View {
     private func timelineScrubber() -> some View {
         VStack(spacing: 8) {
             GeometryReader { geo in
+                let currentFraction = isDraggingSlider ? sliderFraction : playerVM.progress
+                let safeFraction = max(0.0, min(currentFraction.isNaN ? 0.0 : currentFraction, 1.0))
+                let safeWidth = max(0.0, min(geo.size.width * CGFloat(safeFraction), geo.size.width))
+
                 ZStack(alignment: .leading) {
                     // Background Bar
                     Capsule()
@@ -208,18 +212,22 @@ public struct NowPlayingView: View {
                     // Active Progress Bar with Cyan Tint
                     Capsule()
                         .fill(Color(hex: "00F2FE"))
-                        .frame(width: geo.size.width * CGFloat(isDraggingSlider ? sliderFraction : playerVM.progress), height: 4)
+                        .frame(width: safeWidth, height: 4)
                 }
                 .frame(height: 20)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
+                            guard geo.size.width > 0 else { return }
                             isDraggingSlider = true
-                            sliderFraction = max(0.0, min(value.location.x / geo.size.width, 1.0))
+                            let rawFraction = value.location.x / geo.size.width
+                            sliderFraction = max(0.0, min(rawFraction.isNaN ? 0.0 : rawFraction, 1.0))
                         }
                         .onEnded { value in
-                            let target = max(0.0, min(value.location.x / geo.size.width, 1.0))
+                            guard geo.size.width > 0 else { return }
+                            let rawFraction = value.location.x / geo.size.width
+                            let target = max(0.0, min(rawFraction.isNaN ? 0.0 : rawFraction, 1.0))
                             playerVM.seek(toFraction: target)
                             isDraggingSlider = false
                         }

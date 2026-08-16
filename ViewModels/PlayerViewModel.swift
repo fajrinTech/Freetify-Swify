@@ -12,7 +12,7 @@ public final class PlayerViewModel {
 
     public var isPlaying: Bool = false
     public var currentTime: TimeInterval = 0
-    public var duration: TimeInterval = 1.0
+    public var duration: TimeInterval = 180.0
 
     public var isShuffleEnabled: Bool = false
     public var isRepeatEnabled: Bool = false
@@ -29,12 +29,12 @@ public final class PlayerViewModel {
 
     private func setupBindings() {
         audioService.onTimeUpdate = { [weak self] time in
-            guard let self = self else { return }
+            guard let self = self, !time.isNaN && !time.isInfinite && time >= 0 else { return }
             self.currentTime = time
         }
 
         audioService.onDurationUpdate = { [weak self] dur in
-            guard let self = self, dur > 0 else { return }
+            guard let self = self, !dur.isNaN && !dur.isInfinite && dur > 0 else { return }
             self.duration = dur
         }
 
@@ -58,7 +58,7 @@ public final class PlayerViewModel {
             queueIndex = 0
         }
         currentTrack = track
-        duration = track.duration > 0 ? track.duration : 1.0
+        duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
         currentTime = 0
         audioService.loadAndPlay(track: track)
     }
@@ -69,7 +69,7 @@ public final class PlayerViewModel {
         self.queueIndex = max(0, min(startIndex, tracks.count - 1))
         let track = tracks[queueIndex]
         self.currentTrack = track
-        self.duration = track.duration > 0 ? track.duration : 1.0
+        self.duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
         self.currentTime = 0
         audioService.loadAndPlay(track: track)
     }
@@ -83,12 +83,14 @@ public final class PlayerViewModel {
     }
 
     public func seek(toFraction fraction: Double) {
+        guard !fraction.isNaN && !fraction.isInfinite else { return }
         let clamped = max(0.0, min(fraction, 1.0))
         let targetTime = clamped * duration
         audioService.seek(to: targetTime)
     }
 
     public func seek(toSeconds seconds: TimeInterval) {
+        guard !seconds.isNaN && !seconds.isInfinite else { return }
         let clamped = max(0.0, min(seconds, duration))
         audioService.seek(to: clamped)
     }
@@ -144,8 +146,11 @@ public final class PlayerViewModel {
 
     // MARK: - Computed Properties
     public var progress: Double {
-        guard duration > 0 else { return 0 }
-        return min(max(currentTime / duration, 0.0), 1.0)
+        guard duration > 0 && !duration.isNaN && !duration.isInfinite && !currentTime.isNaN && !currentTime.isInfinite else {
+            return 0.0
+        }
+        let value = currentTime / duration
+        return min(max(value, 0.0), 1.0)
     }
 
     public var formattedCurrentTime: String {
@@ -153,7 +158,8 @@ public final class PlayerViewModel {
     }
 
     public var formattedRemainingTime: String {
-        let remaining = max(0, duration - currentTime)
+        guard duration > 0 && !duration.isNaN && !currentTime.isNaN else { return "-0:00" }
+        let remaining = max(0.0, duration - currentTime)
         return "-\(formatTime(remaining))"
     }
 
@@ -162,6 +168,7 @@ public final class PlayerViewModel {
     }
 
     private func formatTime(_ time: TimeInterval) -> String {
+        guard !time.isNaN && !time.isInfinite && time >= 0 else { return "0:00" }
         let totalSeconds = Int(time)
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60

@@ -74,8 +74,11 @@ public struct MiniPlayerView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
 
-                    // Garis Progres Pemutaran Tipis di Bawah
+                    // Garis Progres Pemutaran Tipis di Bawah (Aman dari NaN / Infinity)
                     GeometryReader { geo in
+                        let validProgress = max(0.0, min(playerVM.progress, 1.0))
+                        let barWidth = max(0.0, min(geo.size.width * CGFloat(validProgress), geo.size.width))
+
                         ZStack(alignment: .leading) {
                             Rectangle()
                                 .fill(Color.white.opacity(0.15))
@@ -83,7 +86,7 @@ public struct MiniPlayerView: View {
 
                             Rectangle()
                                 .fill(Color.white)
-                                .frame(width: geo.size.width * CGFloat(playerVM.progress), height: 2)
+                                .frame(width: barWidth, height: 2)
                         }
                     }
                     .frame(height: 2)
