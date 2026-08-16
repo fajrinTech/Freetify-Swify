@@ -8,7 +8,7 @@ public struct ShareLyricsModal: View {
     @Environment(PlayerViewModel.self) private var playerVM
 
     @State private var showSavedToast: Bool = false
-    @State private var saveErrorMessage: String? = nil
+    @State private var loadedArtwork: UIImage? = nil
 
     public init() {}
 
@@ -36,7 +36,9 @@ public struct ShareLyricsModal: View {
                             LyricsStickerPreviewCard(
                                 track: track,
                                 lines: lyricsVM.selectedLines,
-                                palette: lyricsVM.selectedPalette
+                                palette: lyricsVM.selectedPalette,
+                                artworkImage: loadedArtwork,
+                                isExportMode: false
                             )
                             .frame(maxWidth: 340)
                             .padding(.horizontal, 16)
@@ -206,6 +208,14 @@ public struct ShareLyricsModal: View {
                     .padding(.bottom, 16)
                 }
             }
+            .task(id: playerVM.currentTrack?.id) {
+                if let track = playerVM.currentTrack, let artworkURL = track.artworkURL {
+                    if let (data, _) = try? await URLSession.shared.data(from: artworkURL),
+                       let img = UIImage(data: data) {
+                        self.loadedArtwork = img
+                    }
+                }
+            }
             .navigationTitle("Bagikan Lirik")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -224,15 +234,18 @@ public struct ShareLyricsModal: View {
     private func renderLyricImage() -> UIImage? {
         guard let track = playerVM.currentTrack else { return nil }
 
-        let stickerView = LyricsStickerPreviewCard(
+        let exportView = LyricsStickerPreviewCard(
             track: track,
             lines: lyricsVM.selectedLines,
-            palette: lyricsVM.selectedPalette
+            palette: lyricsVM.selectedPalette,
+            artworkImage: loadedArtwork,
+            isExportMode: true
         )
         .frame(width: 340)
 
-        let renderer = ImageRenderer(content: stickerView)
+        let renderer = ImageRenderer(content: exportView)
         renderer.scale = UIScreen.main.scale
+        renderer.isOpaque = false // Transparansi penuh tanpa latar kotak hitam di sudut
         return renderer.uiImage
     }
 
@@ -281,22 +294,32 @@ public struct LyricsStickerPreviewCard: View {
     public let track: Track
     public let lines: [LyricLine]
     public let palette: SharePalette
+    public var artworkImage: UIImage? = nil
+    public var isExportMode: Bool = false
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             // Header: Judul Lagu, Artis & Logo Freetify
             HStack(alignment: .top) {
                 HStack(spacing: 10) {
-                    AsyncImage(url: track.artworkURL) { phase in
-                        switch phase {
-                        case .success(let img):
-                            img.resizable().aspectRatio(contentMode: .fill)
-                        default:
-                            Color.black.opacity(0.3)
+                    if let uiImage = artworkImage {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 42, height: 42)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    } else {
+                        AsyncImage(url: track.artworkURL) { phase in
+                            switch phase {
+                            case .success(let img):
+                                img.resizable().aspectRatio(contentMode: .fill)
+                            default:
+                                Color.black.opacity(0.3)
+                            }
                         }
+                        .frame(width: 42, height: 42)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(track.title)
@@ -320,10 +343,10 @@ public struct LyricsStickerPreviewCard: View {
                     Text("Freetify")
                         .font(.system(size: 11, weight: .heavy))
                 }
-                .foregroundColor(palette.primaryTextColor.opacity(0.8))
+                .foregroundColor(palette.primaryTextColor.opacity(0.85))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Capsule().fill(Color.white.opacity(0.15)))
+                .background(Capsule().fill(Color.white.opacity(0.18)))
             }
 
             // Teks Lirik yang Dipilih
@@ -355,6 +378,7 @@ public struct LyricsStickerPreviewCard: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
         }
-        .shadow(color: Color.black.opacity(0.3), radius: 16, x: 0, y: 8)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: isExportMode ? Color.clear : Color.black.opacity(0.3), radius: 16, x: 0, y: 8)
     }
 }
