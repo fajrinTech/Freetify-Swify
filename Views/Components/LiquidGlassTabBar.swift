@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Floating 3D Chromatic Liquid Glass Bubble TabBar (100% Persis Gaya Telegram iOS - Gambar 2)
-/// Dilengkapi lensa kaca cair cembung tembus pandang, dispersi prisma pelangi ganda, dan pelacakan usap 1:1 tanpa getaran
+/// Floating 3D Chromatic Liquid Glass Bubble TabBar (Formula Lengkap Telegram iOS)
+/// Menggunakan Refraksi Kaca Cembung Radial, Cincin Prisma Spektrum (Screen Blend), dan Animasi Pegas Elastis
 public struct LiquidGlassTabBar: View {
     @Binding var selectedTab: TabItem
 
@@ -18,11 +18,11 @@ public struct LiquidGlassTabBar: View {
         GeometryReader { geo in
             let totalWidth = geo.size.width
             let tabWidth = totalWidth / CGFloat(tabs.count)
-            let bubbleWidth = tabWidth * 0.96
+            let bubbleWidth = tabWidth * 0.94
             let selectedIndex = tabs.firstIndex(of: selectedTab) ?? 0
             let restingX = (CGFloat(selectedIndex) * tabWidth) + (tabWidth - bubbleWidth) / 2
 
-            // Posisi X lensa kaca mengikuti jari 1:1 saat diusap, atau kembali ke tab aktif saat dilepas
+            // Posisi X lensa kaca mengikuti jari saat diusap, atau berada di tab aktif saat diam
             let bubbleX: CGFloat = {
                 if let touchX = dragPositionX {
                     let clamped = max(0, min(touchX - bubbleWidth / 2, totalWidth - bubbleWidth))
@@ -32,68 +32,61 @@ public struct LiquidGlassTabBar: View {
             }()
 
             ZStack(alignment: .leading) {
-                // 1. Dark Frosted Glass Base Track (Kapsul Lintasan Gelap)
+                // 1. Base Dark Frosted Glass Pill (Lintasan Kapsul Gelap)
                 Capsule()
-                    .fill(.ultraThinMaterial)
+                    .fill(Color(white: 0.10).opacity(0.88))
                     .overlay {
                         Capsule()
-                            .fill(Color(hex: "0A0D14").opacity(0.90))
+                            .fill(.ultraThinMaterial.opacity(0.3))
                     }
                     .overlay {
-                        // Hairline Specular Border Kaca Luar
+                        // Hairline Specular Border
                         Capsule()
                             .strokeBorder(
                                 LinearGradient(
-                                    colors: [Color.white.opacity(0.28), Color.white.opacity(0.06)],
+                                    colors: [Color.white.opacity(0.30), Color.white.opacity(0.06)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
                                 lineWidth: 1
                             )
                     }
-                    .frame(height: 60)
-                    .shadow(color: Color.black.opacity(0.55), radius: 14, x: 0, y: 7)
+                    .frame(height: 64)
+                    .shadow(color: Color.black.opacity(0.50), radius: 14, x: 0, y: 7)
 
-                // 2. 3D Chromatic Liquid Glass Lens (Lensa Kaca Pembesar Tembus Pandang Persis Telegram iOS)
-                telegramLiquidGlassOrb(width: bubbleWidth, height: 66)
-                    .offset(x: bubbleX)
-                    .scaleEffect(isTouching ? 1.04 : 1.0, anchor: .center)
-                    .animation(isTouching ? .interactiveSpring(response: 0.14, dampingFraction: 0.88) : .spring(response: 0.32, dampingFraction: 0.74), value: bubbleX)
+                // 2. Liquid Glass Bubble (Indikator Kaca Cembung 72pt Menjulang Mengikuti Tab)
+                LiquidBubbleView()
+                    .frame(width: bubbleWidth, height: 72)
+                    .offset(x: bubbleX, y: -4)
+                    .animation(isTouching ? .interactiveSpring(response: 0.15, dampingFraction: 0.88) : .spring(response: 0.45, dampingFraction: 0.65), value: bubbleX)
 
                 // 3. Tab Items (Ikon & Label)
                 HStack(spacing: 0) {
                     ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
                         let isSelected = (selectedTab == tab)
 
-                        VStack(spacing: 2) {
+                        VStack(spacing: 3) {
                             Image(systemName: isSelected ? tab.activeIcon : tab.icon)
-                                .font(.system(size: isSelected ? 22 : 18, weight: isSelected ? .bold : .medium))
-                                .foregroundStyle(
-                                    isSelected
-                                        ? LinearGradient(
-                                            colors: [Color(hex: "2979FF"), Color(hex: "00E5FF")],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                        : LinearGradient(
-                                            colors: [Color.white.opacity(0.52), Color.white.opacity(0.52)],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                )
-                                // Efek pembesaran optik ketika ikon berada di bawah lensa kaca
-                                .scaleEffect(isSelected ? 1.18 : 1.0)
-                                .animation(.spring(response: 0.28, dampingFraction: 0.74), value: isSelected)
+                                .font(.system(size: 21, weight: .bold))
+                                .foregroundStyle(isSelected ? Color(hex: "00F2FE") : Color.white.opacity(0.50))
+                                .scaleEffect(isSelected ? 1.15 : 1.0)
+                                .animation(.spring(response: 0.30), value: isSelected)
 
                             Text(tab.title)
-                                .font(.system(size: 11, weight: isSelected ? .heavy : .semibold))
-                                .foregroundColor(isSelected ? .white : .white.opacity(0.50))
+                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                                .foregroundColor(isSelected ? Color(hex: "00F2FE") : Color.white.opacity(0.50))
                         }
-                        .frame(width: tabWidth, height: 60)
+                        .frame(width: tabWidth, height: 64)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) {
+                                selectedTab = tab
+                            }
+                        }
                     }
                 }
             }
-            .frame(height: 60)
+            .frame(height: 64)
             .contentShape(Rectangle())
             .gesture(
                 // Gesture Usap Jari Real-Time 1:1 (Tanpa Getaran Haptic)
@@ -116,7 +109,7 @@ public struct LiquidGlassTabBar: View {
                         let targetIndex = Int(clampedX / tabWidth)
                         let safeIndex = max(0, min(targetIndex, tabs.count - 1))
 
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.74)) {
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) {
                             selectedTab = tabs[safeIndex]
                             dragPositionX = nil
                             isTouching = false
@@ -124,105 +117,67 @@ public struct LiquidGlassTabBar: View {
                     }
             )
         }
-        .frame(height: 66)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 12)
+        .frame(height: 72)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
     }
+}
 
-    // MARK: - Telegram iOS 3D Chromatic Liquid Glass Orb (Persis Gambar 2)
-    @ViewBuilder
-    private func telegramLiquidGlassOrb(width: CGFloat, height: CGFloat) -> some View {
+// MARK: - Sub-komponen Kaca Cembung & Chromatic Ring (Formula Telegram)
+public struct LiquidBubbleView: View {
+    public init() {}
+
+    public var body: some View {
         ZStack {
-            // A. Lensa Kaca Bening Tembus Pandang 100% (Ultra Thin Clear Material)
-            RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-                        .fill(Color.white.opacity(0.06))
-                }
-
-            // B. Dispersi Prisma Pelangi Atas (Warm Rainbow Prism Arc - Merah/Kuning/Hijau)
-            RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.clear,
-                            Color(hex: "FF2A6D").opacity(0.85),
-                            Color(hex: "FFD000").opacity(0.95),
-                            Color(hex: "00FFB2").opacity(0.90),
-                            Color.clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    lineWidth: 2.2
-                )
-                .mask {
-                    VStack {
-                        Rectangle()
-                            .frame(height: height * 0.45)
-                        Spacer()
-                    }
-                }
-                .blur(radius: 0.8)
-
-            // C. Dispersi Prisma Pelangi Bawah (Cool Rainbow Prism Arc - Biru/Cyan/Violet)
-            RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.clear,
-                            Color(hex: "0091FF").opacity(0.90),
-                            Color(hex: "7928CA").opacity(0.85),
-                            Color(hex: "FF007A").opacity(0.75),
-                            Color.clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    lineWidth: 2.2
-                )
-                .mask {
-                    VStack {
-                        Spacer()
-                        Rectangle()
-                            .frame(height: height * 0.45)
-                    }
-                }
-                .blur(radius: 0.8)
-
-            // D. Specular Top Crescent Lens Glare (Kilau Pantulan Kaca Cembung 3D Khas Apple)
-            RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+            // 1. Refraksi Kaca Cembung (Radial Gradient + UltraThinMaterial Jernih)
+            Capsule()
                 .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.white.opacity(0.35),
+                            Color.white.opacity(0.08),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 5,
+                        endRadius: 40
+                    )
+                )
+                .background(.ultraThinMaterial.opacity(0.35))
+                .clipShape(Capsule())
+                .shadow(color: Color.black.opacity(0.45), radius: 10, y: 5)
+
+            // 2. Chromatic Spectral Edge (Cincin Spektrum Prisma Warna Menyala)
+            Capsule()
+                .strokeBorder(
+                    AngularGradient(
+                        colors: [
+                            Color(red: 0.0, green: 0.9, blue: 1.0), // Cyan
+                            Color(red: 0.3, green: 0.2, blue: 1.0), // Deep Blue
+                            Color(red: 1.0, green: 0.1, blue: 0.6), // Magenta
+                            Color(red: 0.8, green: 1.0, blue: 0.2), // Lime/Yellow
+                            Color(red: 0.0, green: 0.9, blue: 1.0)  // Loop ke Cyan
+                        ],
+                        center: .center
+                    ),
+                    lineWidth: 2.0
+                )
+                .blendMode(.screen)
+
+            // 3. Specular Top Glare (Pantulan Kilau Kaca Atas)
+            Capsule()
+                .strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.80),
-                            Color.white.opacity(0.18),
+                            Color.white.opacity(0.90),
+                            Color.white.opacity(0.20),
                             Color.clear
                         ],
                         startPoint: .top,
                         endPoint: .center
-                    )
-                )
-                .padding(2)
-
-            // E. Garis Tepi Kaca Halus Transparan (Specular Hairline Edge)
-            RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.85),
-                            Color.white.opacity(0.20),
-                            Color.white.opacity(0.10)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
                     ),
-                    lineWidth: 1.0
+                    lineWidth: 1.2
                 )
         }
-        .frame(width: width, height: height)
-        // Natural Contact Glass Shadow (Bebas dari warna biru luar mentereng)
-        .shadow(color: Color.black.opacity(0.45), radius: 10, x: 0, y: 5)
     }
 }

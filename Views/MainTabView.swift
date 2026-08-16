@@ -38,8 +38,7 @@ public struct MainTabView: View {
                 }
 
                 LiquidGlassTabBar(selectedTab: $selectedTab)
-                    .frame(height: 66)
-                    .padding(.horizontal, 16)
+                    .frame(height: 72)
             }
             .padding(.bottom, 8)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: playerVM.currentTrack != nil)
