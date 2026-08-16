@@ -19,7 +19,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fajrin.freetifyv1
-        PRODUCT_NAME: "Freetify v1"
+        PRODUCT_NAME: "Freetify Beta v1"
         INFOPLIST_FILE: Resources/Info.plist
         SWIFT_VERSION: "6.0"
         ENABLE_BITCODE: NO

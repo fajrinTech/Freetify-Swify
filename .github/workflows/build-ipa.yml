@@ -44,11 +44,11 @@ jobs:
       - name: Package Unsigned IPA
         run: |
           mkdir -p Payload
-          cp -r "build/Freetify.xcarchive/Products/Applications/Freetify v1.app" Payload/ || cp -r build/Freetify.xcarchive/Products/Applications/*.app Payload/
-          zip -r Freetify-v1-Unsigned.ipa Payload
+          cp -r build/Freetify.xcarchive/Products/Applications/*.app Payload/
+          zip -r Freetify-Beta-v1-Unsigned.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Freetify-v1-Physical-Unsigned-IPA
-          path: Freetify-v1-Unsigned.ipa
+          name: Freetify-Beta-v1-Physical-Unsigned-IPA
+          path: Freetify-Beta-v1-Unsigned.ipa

@@ -15,6 +15,7 @@ DerivedData/
 
 # App Archives & IPAs
 *.ipa
+*.zip
 *.xcarchive
 Payload/
 
