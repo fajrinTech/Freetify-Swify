@@ -54,8 +54,16 @@ public struct NowPlayingView: View {
                     .padding(.top, 10)
                 }
             }
-            .task {
+            .task(id: track.id) {
                 await lyricsVM.loadLyrics(for: track)
+                lyricsVM.updateActiveLine(currentTime: playerVM.currentTime)
+            }
+            .onChange(of: playerVM.currentTrack?.id) { _, _ in
+                if let current = playerVM.currentTrack {
+                    Task {
+                        await lyricsVM.loadLyrics(for: current)
+                    }
+                }
             }
             .onChange(of: playerVM.currentTime) { _, newTime in
                 lyricsVM.updateActiveLine(currentTime: newTime)

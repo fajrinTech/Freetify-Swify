@@ -31,14 +31,17 @@ public struct MainTabView: View {
             .ignoresSafeArea(edges: .bottom)
 
             // Floating Mini Player & Glass Tab Bar di Bagian Bawah
-            VStack(spacing: 0) {
+            VStack(spacing: 8) {
                 if playerVM.currentTrack != nil {
                     MiniPlayerView()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 LiquidGlassTabBar(selectedTab: $selectedTab)
+                    .frame(height: 66)
+                    .padding(.horizontal, 16)
             }
+            .padding(.bottom, 8)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: playerVM.currentTrack != nil)
 
             // Sidebar Drawer Navigasi
