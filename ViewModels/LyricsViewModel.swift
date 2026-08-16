@@ -26,7 +26,9 @@ public final class LyricsViewModel {
         }
 
         currentLoadedTrackID = track.id
-        selectedLines = []
+        self.lines = [] // Reset lirik lagu sebelumnya seketika agar tidak tercampur
+        self.selectedLines = []
+        self.activeLineIndex = 0
 
         // 1. Cek lirik yang sudah tersemat langsung di model Track
         if let lrc = track.lyricsLRC, !lrc.isEmpty {
@@ -42,11 +44,16 @@ public final class LyricsViewModel {
 
         // 3. Fallback: Ambil secara live dari LRCLIB API
         isLoading = true
-        if let fetchedLrc = await lrclibService.fetchLyrics(title: track.title, artist: track.artist) {
-            self.lines = LRCParser.parse(fetchedLrc)
-            cacheService.cacheLyrics(trackID: track.id, lrcText: fetchedLrc)
+        if let fetchedLrc = await lrclibService.fetchLyrics(title: track.title, artist: track.artist, duration: track.duration) {
+            // Pastikan track yang sedang dimuat masih sama saat respons tiba
+            if currentLoadedTrackID == track.id {
+                self.lines = LRCParser.parse(fetchedLrc)
+                cacheService.cacheLyrics(trackID: track.id, lrcText: fetchedLrc)
+            }
         } else {
-            self.lines = []
+            if currentLoadedTrackID == track.id {
+                self.lines = []
+            }
         }
         isLoading = false
     }
