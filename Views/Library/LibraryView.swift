@@ -91,6 +91,12 @@ public struct LibraryView: View {
                         }
                         .padding(.top, 8)
                     }
+                    .refreshable {
+                        await libraryVM.loadLibrary()
+                    }
+                    .task {
+                        await libraryVM.loadLibrary()
+                    }
                 }
             }
             .navigationBarHidden(true)

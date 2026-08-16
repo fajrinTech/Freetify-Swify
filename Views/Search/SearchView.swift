@@ -93,6 +93,12 @@ public struct SearchView: View {
                         }
                         .padding(.top, 12)
                     }
+                    .refreshable {
+                        await libVM.loadLibrary()
+                    }
+                    .task {
+                        await libVM.loadLibrary()
+                    }
                 }
             }
             .navigationBarHidden(true)

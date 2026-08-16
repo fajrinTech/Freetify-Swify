@@ -17,15 +17,20 @@ public final class LibraryViewModel {
     public init() {
         self.allTracks = Track.samples
         refreshFavorites()
+        Task { [weak self] in
+            await self?.loadLibrary()
+        }
     }
 
     public func loadLibrary() async {
         isLoading = true
         do {
             let fetched = try await supabaseService.fetchSongs()
-            self.allTracks = fetched
+            if !fetched.isEmpty {
+                self.allTracks = fetched
+            }
         } catch {
-            self.allTracks = Track.samples
+            print("[LibraryViewModel] Error loading songs: \(error.localizedDescription)")
         }
         refreshFavorites()
         isLoading = false

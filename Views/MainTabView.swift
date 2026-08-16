@@ -44,6 +44,9 @@ public struct MainTabView: View {
             // Sidebar Drawer Navigasi
             SidebarDrawerView(isPresented: $isDrawerPresented)
         }
+        .task {
+            await libraryVM.loadLibrary()
+        }
         .sheet(isPresented: $playerBinding.isNowPlayingPresented) {
             NowPlayingView()
         }

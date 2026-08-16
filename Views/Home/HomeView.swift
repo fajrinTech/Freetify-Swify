@@ -87,6 +87,12 @@ public struct HomeView: View {
                         }
                         .padding(.top, 12)
                     }
+                    .refreshable {
+                        await libraryVM.loadLibrary()
+                    }
+                    .task {
+                        await libraryVM.loadLibrary()
+                    }
                 }
             }
             .navigationBarHidden(true)

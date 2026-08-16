@@ -41,18 +41,6 @@ public final class SupabaseService: Sendable {
         self.session = session
     }
 
-    /// Struktur DTO respons tabel `songs` di Supabase
-    private struct SupabaseSongDTO: Codable {
-        let id: String
-        let title: String?
-        let artist: String?
-        let album: String?
-        let duration: Double?
-        let filePath: String?
-        let coverPath: String?
-        let lyrics: String?
-    }
-
     /// Mengambil daftar lagu nyata dari tabel `songs` di Supabase Database
     public func fetchSongs() async throws -> [Track] {
         guard let endpoint = URL(string: "\(config.url)/rest/v1/songs?select=*") else {
@@ -69,38 +57,58 @@ public final class SupabaseService: Sendable {
         do {
             let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-                print("[SupabaseService] HTTP Error code: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
                 return Track.samples
             }
-
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            let dtos = try decoder.decode([SupabaseSongDTO].self, from: data)
 
             let favoriteIDs = await MainActor.run {
                 LocalCacheService.shared.getFavoriteIDs()
             }
 
-            let cloudTracks: [Track] = dtos.compactMap { row in
-                guard let audioUrlString = row.filePath, let audioURL = URL(string: audioUrlString) else {
+            // Parsing robust via JSONSerialization agar kebal terhadap variasi tipe data
+            guard let jsonArray = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                return Track.samples
+            }
+
+            let cloudTracks: [Track] = jsonArray.compactMap { dict in
+                guard let id = dict["id"] as? String ?? (dict["id"] as? CustomStringConvertible)?.description,
+                      let filePath = dict["file_path"] as? String,
+                      let audioURL = URL(string: filePath) else {
                     return nil
                 }
 
-                let artworkURL = row.coverPath.flatMap { URL(string: $0) }
+                let title = dict["title"] as? String ?? "Lagu Tanpa Judul"
+                let artist = dict["artist"] as? String ?? "Artis Freetify"
+                let album = dict["album"] as? String ?? "Single"
+                let coverPath = dict["cover_path"] as? String
+                let artworkURL = coverPath.flatMap { URL(string: $0) }
+
+                let rawDur = dict["duration"]
+                let duration: Double
+                if let d = rawDur as? Double {
+                    duration = d
+                } else if let i = rawDur as? Int {
+                    duration = Double(i)
+                } else if let s = rawDur as? String, let parsed = Double(s) {
+                    duration = parsed
+                } else {
+                    duration = 180.0
+                }
+
+                let lyrics = dict["lyrics"] as? String
 
                 return Track(
-                    id: row.id,
-                    title: row.title ?? "Lagu Tanpa Judul",
-                    artist: row.artist ?? "Artis Freetify",
-                    album: row.album ?? "Single",
+                    id: id,
+                    title: title,
+                    artist: artist,
+                    album: album,
                     artworkURL: artworkURL,
                     audioURL: audioURL,
-                    duration: row.duration ?? 180.0,
-                    lyricsLRC: row.lyrics,
-                    isFavorite: favoriteIDs.contains(row.id),
+                    duration: (duration > 0 && !duration.isNaN) ? duration : 180.0,
+                    lyricsLRC: lyrics,
+                    isFavorite: favoriteIDs.contains(id),
                     artistHeroURL: artworkURL,
                     artistBio: "Artis di platform musik Freetify.",
-                    supabaseId: row.id
+                    supabaseId: id
                 )
             }
 
