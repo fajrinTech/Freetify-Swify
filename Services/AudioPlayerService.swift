@@ -49,15 +49,17 @@ public final class AudioPlayerService {
 
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
         self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self else { return }
-            let sec = CMTimeGetSeconds(time)
-            if sec.isFinite && sec >= 0 {
-                self.currentTime = sec
-            }
-            if let item = self.player?.currentItem {
-                let d = CMTimeGetSeconds(item.duration)
-                if d.isFinite && d > 0 {
-                    self.duration = d
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                let sec = CMTimeGetSeconds(time)
+                if sec.isFinite && sec >= 0 {
+                    self.currentTime = sec
+                }
+                if let item = self.player?.currentItem {
+                    let d = CMTimeGetSeconds(item.duration)
+                    if d.isFinite && d > 0 {
+                        self.duration = d
+                    }
                 }
             }
         }
