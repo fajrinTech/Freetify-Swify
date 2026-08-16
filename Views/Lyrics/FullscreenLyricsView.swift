@@ -14,7 +14,7 @@ public struct FullscreenLyricsView: View {
 
         if let track = playerVM.currentTrack {
             ZStack {
-                // Background Gelap dengan Ambient Artwork Tint
+                // Background Gelap dengan Ambient Artwork Tint yang terkunci presisi di ukuran layar
                 ambientBackground(for: track)
 
                 VStack(spacing: 0) {
@@ -32,6 +32,7 @@ public struct FullscreenLyricsView: View {
                                         .font(.system(size: isActive ? 28 : 22, weight: isActive ? .heavy : .bold))
                                         .foregroundColor(isActive ? .white : .white.opacity(0.35))
                                         .multilineTextAlignment(.leading)
+                                        .fixedSize(horizontal: false, vertical: true)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .shadow(color: isActive ? Color.white.opacity(0.5) : .clear, radius: 14, x: 0, y: 0)
                                         .scaleEffect(isActive ? 1.02 : 1.0, anchor: .leading)
@@ -60,7 +61,9 @@ public struct FullscreenLyricsView: View {
                     // Floating Bottom Toolbar: Tombol Bagikan Lirik
                     bottomToolbar()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .task(id: track.id) {
                 await lyricsVM.loadLyrics(for: track)
                 lyricsVM.updateActiveLine(currentTime: playerVM.currentTime)
@@ -78,19 +81,25 @@ public struct FullscreenLyricsView: View {
 
     @ViewBuilder
     private func ambientBackground(for track: Track) -> some View {
-        AsyncImage(url: track.artworkURL) { phase in
-            switch phase {
-            case .success(let img):
-                img
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .blur(radius: 80)
-                    .overlay {
-                        Color(hex: "0B0E14").opacity(0.88)
-                    }
-            default:
-                Color(hex: "0B0E14")
+        GeometryReader { geo in
+            AsyncImage(url: track.artworkURL) { phase in
+                switch phase {
+                case .success(let img):
+                    img
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                        .blur(radius: 80)
+                        .overlay {
+                            Color(hex: "0B0E14").opacity(0.88)
+                        }
+                default:
+                    Color(hex: "0B0E14")
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
         .ignoresSafeArea()
     }

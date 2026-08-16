@@ -73,13 +73,15 @@ public struct NowPlayingView: View {
 
     @ViewBuilder
     private func ambientBackground(for track: Track) -> some View {
-        GeometryReader { _ in
+        GeometryReader { geo in
             AsyncImage(url: track.artworkURL) { phase in
                 switch phase {
                 case .success(let image):
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
                         .blur(radius: 60)
                         .overlay {
                             LinearGradient(
@@ -96,6 +98,8 @@ public struct NowPlayingView: View {
                     Color(hex: "0B0E14")
                 }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
         .ignoresSafeArea()
     }
