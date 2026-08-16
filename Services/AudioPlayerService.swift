@@ -10,7 +10,7 @@ public final class AudioPlayerService {
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var itemEndObserver: Any?
-    private var fadeTimer: Timer?
+    private var fadeTask: Task<Void, Never>?
 
     public var currentTrack: Track?
     public var isPlaying: Bool = false
@@ -99,8 +99,8 @@ public final class AudioPlayerService {
     }
 
     public func pause() {
-        fadeTimer?.invalidate()
-        fadeTimer = nil
+        fadeTask?.cancel()
+        fadeTask = nil
         player?.pause()
         self.isPlaying = false
     }
@@ -122,31 +122,25 @@ public final class AudioPlayerService {
 
     // MARK: - Smooth Audio Fade-In Swell
     private func fadeInAudio(duration: TimeInterval) {
-        fadeTimer?.invalidate()
-        fadeTimer = nil
+        fadeTask?.cancel()
+        fadeTask = nil
 
         guard let activePlayer = player else { return }
         activePlayer.volume = 0.0
         activePlayer.play()
 
-        let totalSteps = 15
-        let stepInterval = duration / Double(totalSteps)
-        var step = 0
+        fadeTask = Task { @MainActor [weak self, weak activePlayer] in
+            guard let _ = self, let p = activePlayer else { return }
+            let totalSteps = 15
+            let intervalNanos = UInt64((duration / Double(totalSteps)) * 1_000_000_000)
 
-        fadeTimer = Timer.scheduledTimer(withTimeInterval: stepInterval, repeats: true) { [weak self, weak activePlayer] timer in
-            guard let self = self, let p = activePlayer else {
-                timer.invalidate()
-                return
+            for step in 1...totalSteps {
+                if Task.isCancelled { break }
+                try? await Task.sleep(nanoseconds: intervalNanos)
+                if Task.isCancelled { break }
+                p.volume = min(1.0, Float(step) / Float(totalSteps))
             }
-            step += 1
-            let progress = Float(step) / Float(totalSteps)
-            p.volume = min(1.0, progress)
-
-            if step >= totalSteps {
-                p.volume = 1.0
-                timer.invalidate()
-                self.fadeTimer = nil
-            }
+            p.volume = 1.0
         }
     }
 }
