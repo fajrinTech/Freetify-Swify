@@ -104,18 +104,20 @@ public final class AudioPlayerService: NSObject {
     private func setupTimeObserver() {
         let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
         timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self else { return }
-            let seconds = CMTimeGetSeconds(time)
-            if !seconds.isNaN && !seconds.isInfinite && seconds >= 0 {
-                self.currentTime = seconds
-                self.onTimeUpdate?(seconds)
-            }
+            Task { @MainActor in
+                guard let self = self else { return }
+                let seconds = CMTimeGetSeconds(time)
+                if !seconds.isNaN && !seconds.isInfinite && seconds >= 0 {
+                    self.currentTime = seconds
+                    self.onTimeUpdate?(seconds)
+                }
 
-            if let item = self.player?.currentItem {
-                let itemDuration = CMTimeGetSeconds(item.duration)
-                if !itemDuration.isNaN && !itemDuration.isInfinite && itemDuration > 0 {
-                    self.duration = itemDuration
-                    self.onDurationUpdate?(itemDuration)
+                if let item = self.player?.currentItem {
+                    let itemDuration = CMTimeGetSeconds(item.duration)
+                    if !itemDuration.isNaN && !itemDuration.isInfinite && itemDuration > 0 {
+                        self.duration = itemDuration
+                        self.onDurationUpdate?(itemDuration)
+                    }
                 }
             }
         }
@@ -150,7 +152,7 @@ public final class AudioPlayerService: NSObject {
         let validDuration = (duration > 0 && !duration.isNaN && !duration.isInfinite) ? duration : (track.duration > 0 ? track.duration : 180.0)
         let validCurrentTime = (!currentTime.isNaN && !currentTime.isInfinite && currentTime >= 0) ? currentTime : 0.0
 
-        var nowPlayingInfo: [String: Any] = [
+        let nowPlayingInfo: [String: Any] = [
             MPMediaItemPropertyTitle: track.title,
             MPMediaItemPropertyArtist: track.artist,
             MPMediaItemPropertyAlbumTitle: track.album,
