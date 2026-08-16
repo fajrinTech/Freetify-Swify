@@ -370,12 +370,17 @@ public struct NowPlayingView: View {
                     .padding(.vertical, 8)
             } else {
                 let activeIdx = lyricsVM.activeLineIndex
-                let previewLines = lyricsVM.lines.prefix(3)
+                let totalLines = lyricsVM.lines.count
+                let startIdx = max(0, min(activeIdx, max(0, totalLines - 3)))
+                let endIdx = min(totalLines, startIdx + 3)
+                let previewLines = Array(lyricsVM.lines[startIdx..<endIdx])
+
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(previewLines.enumerated()), id: \.element.id) { idx, line in
+                    ForEach(previewLines) { line in
+                        let isCurActive = (activeIdx < totalLines && line.id == lyricsVM.lines[activeIdx].id)
                         Text(line.text)
-                            .font(.system(size: 17, weight: idx == activeIdx ? .heavy : .medium))
-                            .foregroundColor(idx == activeIdx ? .white : .white.opacity(0.4))
+                            .font(.system(size: 17, weight: isCurActive ? .heavy : .medium))
+                            .foregroundColor(isCurActive ? .white : .white.opacity(0.4))
                             .lineLimit(1)
                     }
                 }

@@ -24,31 +24,30 @@ public struct FullscreenLyricsView: View {
                     // Daftar Lirik Karaoke Auto-Scrolling
                     ScrollViewReader { proxy in
                         ScrollView(showsIndicators: false) {
-                            VStack(alignment: .leading, spacing: 24) {
+                            LazyVStack(alignment: .leading, spacing: 26) {
                                 ForEach(Array(lyricsVM.lines.enumerated()), id: \.element.id) { index, line in
                                     let isActive = (index == lyricsVM.activeLineIndex)
 
-                                    Button {
-                                        // Tap baris lirik untuk melompat ke detik tersebut
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            playerVM.seek(toSeconds: line.time)
+                                    Text(line.text)
+                                        .font(.system(size: isActive ? 28 : 22, weight: isActive ? .heavy : .bold))
+                                        .foregroundColor(isActive ? .white : .white.opacity(0.35))
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .shadow(color: isActive ? Color.white.opacity(0.5) : .clear, radius: 14, x: 0, y: 0)
+                                        .scaleEffect(isActive ? 1.02 : 1.0, anchor: .leading)
+                                        .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isActive)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            withAnimation(.easeInOut(duration: 0.2)) {
+                                                playerVM.seek(toSeconds: line.time)
+                                            }
                                         }
-                                    } label: {
-                                        Text(line.text)
-                                            .font(.system(size: isActive ? 28 : 22, weight: isActive ? .heavy : .semibold))
-                                            .foregroundColor(isActive ? .white : .white.opacity(0.35))
-                                            .multilineTextAlignment(.leading)
-                                            .shadow(color: isActive ? Color.white.opacity(0.5) : .clear, radius: 14, x: 0, y: 0)
-                                            .scaleEffect(isActive ? 1.03 : 1.0, anchor: .leading)
-                                            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: isActive)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .id(index)
+                                        .id(index)
                                 }
 
-                                Spacer(minLength: 120)
+                                Spacer(minLength: 160)
                             }
-                            .padding(.horizontal, 24)
+                            .padding(.horizontal, 28)
                             .padding(.top, 24)
                         }
                         .onChange(of: lyricsVM.activeLineIndex) { _, newIndex in
@@ -124,7 +123,7 @@ public struct FullscreenLyricsView: View {
 
             Spacer()
 
-            // Tombol Bagikan Lirik ke Instagram
+            // Tombol Bagikan Lirik
             Button {
                 lyricsVM.isShareModalPresented = true
             } label: {
@@ -162,7 +161,7 @@ public struct FullscreenLyricsView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white)
 
-                Text("Ketuk baris lirik untuk lompat waktu")
+                Text("Ketuk lirik untuk lompat waktu")
                     .font(.system(size: 11, weight: .regular))
                     .foregroundColor(.white.opacity(0.5))
             }
@@ -184,9 +183,9 @@ public struct FullscreenLyricsView: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .liquidGlassCard(cornerRadius: 24, tint: Color(hex: "151A22").opacity(0.92))
+        .padding(.vertical, 12)
+        .liquidGlassCard(cornerRadius: 24, tint: Color(hex: "151A22").opacity(0.94))
         .padding(.horizontal, 16)
-        .padding(.bottom, 12)
+        .padding(.bottom, 18)
     }
 }
