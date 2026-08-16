@@ -24,7 +24,7 @@ public struct FullscreenLyricsView: View {
                     // Daftar Lirik Karaoke Auto-Scrolling
                     ScrollViewReader { proxy in
                         ScrollView(showsIndicators: false) {
-                            VStack(alignment: .leading, spacing: 22) {
+                            VStack(alignment: .leading, spacing: 24) {
                                 ForEach(Array(lyricsVM.lines.enumerated()), id: \.element.id) { index, line in
                                     let isActive = (index == lyricsVM.activeLineIndex)
 
@@ -38,9 +38,9 @@ public struct FullscreenLyricsView: View {
                                             .font(.system(size: isActive ? 28 : 22, weight: isActive ? .heavy : .semibold))
                                             .foregroundColor(isActive ? .white : .white.opacity(0.35))
                                             .multilineTextAlignment(.leading)
-                                            .shadow(color: isActive ? Color.white.opacity(0.4) : .clear, radius: 12, x: 0, y: 0)
-                                            .scaleEffect(isActive ? 1.02 : 1.0, anchor: .leading)
-                                            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isActive)
+                                            .shadow(color: isActive ? Color.white.opacity(0.5) : .clear, radius: 14, x: 0, y: 0)
+                                            .scaleEffect(isActive ? 1.03 : 1.0, anchor: .leading)
+                                            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: isActive)
                                     }
                                     .buttonStyle(.plain)
                                     .id(index)
@@ -61,6 +61,13 @@ public struct FullscreenLyricsView: View {
                     // Floating Bottom Toolbar: Tombol Bagikan Lirik
                     bottomToolbar()
                 }
+            }
+            .task(id: track.id) {
+                await lyricsVM.loadLyrics(for: track)
+                lyricsVM.updateActiveLine(currentTime: playerVM.currentTime)
+            }
+            .onChange(of: playerVM.currentTime) { _, newTime in
+                lyricsVM.updateActiveLine(currentTime: newTime)
             }
             .sheet(isPresented: $lyricsBinding.isShareModalPresented) {
                 ShareLyricsModal()

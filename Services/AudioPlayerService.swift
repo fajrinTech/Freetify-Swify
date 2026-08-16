@@ -9,11 +9,13 @@ public final class AudioPlayerService {
 
     private var player: AVPlayer?
     private var timeObserver: Any?
+    private var itemEndObserver: Any?
 
     public var currentTrack: Track?
     public var isPlaying: Bool = false
     public var currentTime: Double = 0.0
     public var duration: Double = 180.0
+    public var onTrackFinished: (() -> Void)?
 
     public init() {
         setupAudioSession()
@@ -41,13 +43,18 @@ public final class AudioPlayerService {
             p.removeTimeObserver(obs)
             timeObserver = nil
         }
+        if let obs = itemEndObserver {
+            NotificationCenter.default.removeObserver(obs)
+            itemEndObserver = nil
+        }
 
         let playerItem = AVPlayerItem(url: track.audioURL)
         let newPlayer = AVPlayer(playerItem: playerItem)
         newPlayer.automaticallyWaitsToMinimizeStalling = true
         self.player = newPlayer
 
-        let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
+        // Interval 0.2s untuk sinkronisasi lirik karaoke yang responsif dan presisi
+        let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
         self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
@@ -61,6 +68,18 @@ public final class AudioPlayerService {
                         self.duration = d
                     }
                 }
+            }
+        }
+
+        // Auto-play lagu selanjutnya saat lagu ini selesai
+        self.itemEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.onTrackFinished?()
             }
         }
 

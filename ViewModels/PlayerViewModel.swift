@@ -18,7 +18,13 @@ public final class PlayerViewModel {
     private let audioService = AudioPlayerService.shared
     private let cacheService = LocalCacheService.shared
 
-    public init() {}
+    public init() {
+        audioService.onTrackFinished = { [weak self] in
+            MainActor.assumeIsolated {
+                self?.handleTrackFinished()
+            }
+        }
+    }
 
     public var currentTrack: Track? {
         audioService.currentTrack
@@ -37,12 +43,21 @@ public final class PlayerViewModel {
     }
 
     // MARK: - Playback Commands
-    public func play(track: Track) {
-        if let index = queue.firstIndex(where: { $0.id == track.id }) {
-            queueIndex = index
+    public func play(track: Track, inQueue: [Track]? = nil) {
+        if let newQueue = inQueue, !newQueue.isEmpty {
+            self.queue = newQueue
+            if let index = newQueue.firstIndex(where: { $0.id == track.id }) {
+                self.queueIndex = index
+            } else {
+                self.queueIndex = 0
+            }
         } else {
-            queue = [track]
-            queueIndex = 0
+            if let index = queue.firstIndex(where: { $0.id == track.id }) {
+                self.queueIndex = index
+            } else {
+                self.queue = [track]
+                self.queueIndex = 0
+            }
         }
         audioService.loadAndPlay(track: track)
     }
@@ -84,7 +99,7 @@ public final class PlayerViewModel {
             queueIndex = (queueIndex + 1) % queue.count
         }
         let track = queue[queueIndex]
-        play(track: track)
+        audioService.loadAndPlay(track: track)
     }
 
     public func previousTrack() {
@@ -94,7 +109,16 @@ public final class PlayerViewModel {
         } else {
             queueIndex = (queueIndex - 1 + queue.count) % queue.count
             let track = queue[queueIndex]
-            play(track: track)
+            audioService.loadAndPlay(track: track)
+        }
+    }
+
+    private func handleTrackFinished() {
+        if isRepeatEnabled {
+            seek(toSeconds: 0)
+            audioService.play()
+        } else {
+            nextTrack()
         }
     }
 

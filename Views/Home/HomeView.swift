@@ -240,7 +240,7 @@ public struct HomeView: View {
                 .padding(.horizontal, 20)
 
             Button {
-                playerVM.play(track: track)
+                playerVM.play(track: track, inQueue: filteredTracks)
             } label: {
                 ZStack(alignment: .bottomLeading) {
                     // Background Hero Image dengan Ambient Gradient
@@ -334,7 +334,7 @@ public struct HomeView: View {
                 HStack(spacing: 16) {
                     ForEach(libraryVM.allTracks) { track in
                         Button {
-                            playerVM.play(track: track)
+                            playerVM.play(track: track, inQueue: libraryVM.allTracks)
                         } label: {
                             VStack(alignment: .leading, spacing: 8) {
                                 // Circular Vinyl Disc Card with Center Artwork
@@ -442,7 +442,7 @@ public struct HomeView: View {
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            playerVM.play(track: track)
+                            playerVM.play(track: track, inQueue: filteredTracks)
                         }
 
                         Spacer()

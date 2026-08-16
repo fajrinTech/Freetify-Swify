@@ -69,7 +69,7 @@ public struct LibraryView: View {
                                     }
                                     .contentShape(Rectangle())
                                     .onTapGesture {
-                                        playerVM.play(track: track)
+                                        playerVM.play(track: track, inQueue: displayedTracks)
                                     }
 
                                     Spacer()

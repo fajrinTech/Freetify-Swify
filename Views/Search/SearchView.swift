@@ -272,7 +272,7 @@ public struct SearchView: View {
                 VStack(spacing: 8) {
                     ForEach(libVM.filteredTracks) { track in
                         Button {
-                            playerVM.play(track: track)
+                            playerVM.play(track: track, inQueue: libVM.filteredTracks)
                         } label: {
                             HStack(spacing: 12) {
                                 AsyncImage(url: track.artworkURL) { phase in
