@@ -26,7 +26,6 @@ public final class AudioPlayerService {
     public init() {
         setupAudioSession()
         setupRemoteCommandCenter()
-        UIApplication.shared.beginReceivingRemoteControlEvents()
     }
 
     private func setupAudioSession() {
@@ -123,7 +122,8 @@ public final class AudioPlayerService {
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]
 
-        if let img = currentArtwork, img.size.width > 0, img.size.height > 0 {
+        // Sanitasi ketat: Hanya buat MPMediaItemArtwork jika image memiliki CGImage valid
+        if let img = currentArtwork, img.cgImage != nil, img.size.width > 0, img.size.height > 0 {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
         }
 
@@ -144,12 +144,12 @@ public final class AudioPlayerService {
             itemEndObserver = nil
         }
 
-        // Gunakan file lokal disk jika sudah di-cache (100% offline / 0 KB kuota)
+        // Gunakan file lokal disk jika sudah tervalidasi utuh (> 100 KB), atau stream dari cloud
         let playbackURL = LocalCacheService.shared.getLocalAudioURL(trackID: track.id) ?? track.audioURL
         let playerItem = AVPlayerItem(url: playbackURL)
         playerItem.preferredForwardBufferDuration = 5.0
 
-        // Jika memutar via stream cloud, unduh di background agar siap offline pada pemutaran selanjutnya
+        // Jika memutar via stream cloud, unduh di background secara aman
         if playbackURL == track.audioURL {
             Task {
                 await LocalCacheService.shared.cacheAudioFile(trackID: track.id, from: track.audioURL)
@@ -201,12 +201,14 @@ public final class AudioPlayerService {
         self.isPlaying = true
         updateNowPlayingInfo()
 
-        // Unduh cover album untuk Lock Screen
+        // Unduh cover album untuk Lock Screen secara aman di MainActor
         if let artworkURL = track.artworkURL {
             Task {
                 if let (data, _) = try? await URLSession.shared.data(from: artworkURL),
                    let img = UIImage(data: data) {
-                    self.updateNowPlayingInfo(artworkImage: img)
+                    await MainActor.run {
+                        self.updateNowPlayingInfo(artworkImage: img)
+                    }
                 }
             }
         }

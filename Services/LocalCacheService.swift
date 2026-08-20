@@ -42,25 +42,44 @@ public final class LocalCacheService: @unchecked Sendable {
         return isNowFavorite
     }
 
-    // MARK: - Smart Audio Disk Cache (Offline Playback)
+    // MARK: - Smart Audio Disk Cache (Offline Playback dengan Validasi Integritas)
     public func getLocalAudioURL(trackID: String) -> URL? {
         let fileURL = audioCacheDir.appendingPathComponent("\(trackID).mp3")
-        if fileManager.fileExists(atPath: fileURL.path) {
+        guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
+
+        // Validasi ukuran: File audio valid harus minimal 100 KB
+        if let attrs = try? fileManager.attributesOfItem(atPath: fileURL.path),
+           let fileSize = attrs[.size] as? UInt64, fileSize > 100_000 {
             return fileURL
+        } else {
+            // File korup atau 0-byte, hapus agar tidak membuat AVPlayer crash
+            try? fileManager.removeItem(at: fileURL)
+            return nil
         }
-        return nil
     }
 
     public func cacheAudioFile(trackID: String, from remoteURL: URL) async {
         let destinationURL = audioCacheDir.appendingPathComponent("\(trackID).mp3")
-        guard !fileManager.fileExists(atPath: destinationURL.path) else { return }
+        
+        // Jika file valid sudah ada, tidak perlu download ulang
+        if let attrs = try? fileManager.attributesOfItem(atPath: destinationURL.path),
+           let size = attrs[.size] as? UInt64, size > 100_000 {
+            return
+        }
 
         do {
             let (tempURL, _) = try await URLSession.shared.download(from: remoteURL)
-            if fileManager.fileExists(atPath: destinationURL.path) {
-                try? fileManager.removeItem(at: destinationURL)
+            
+            // Verifikasi ukuran hasil download
+            if let attrs = try? fileManager.attributesOfItem(atPath: tempURL.path),
+               let size = attrs[.size] as? UInt64, size > 100_000 {
+                if fileManager.fileExists(atPath: destinationURL.path) {
+                    try? fileManager.removeItem(at: destinationURL)
+                }
+                try fileManager.moveItem(at: tempURL, to: destinationURL)
+            } else {
+                try? fileManager.removeItem(at: tempURL)
             }
-            try fileManager.moveItem(at: tempURL, to: destinationURL)
         } catch {
             print("[LocalCacheService] Gagal download cache audio: \(error.localizedDescription)")
         }
