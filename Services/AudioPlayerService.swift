@@ -112,13 +112,22 @@ public final class AudioPlayerService {
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]
 
-        // Sanitasi artwork: Validasi gambar valid sebelum membuat MPMediaItemArtwork
+        // Sanitasi artwork: Buat MPMediaItemArtwork melalui helper nonisolated agar kebal
+        // terhadap assertion check saat dipanggil dari background thread MediaPlayer (EXC_BREAKPOINT / SIGTRAP)
         if let img = currentArtwork, img.cgImage != nil, img.size.width > 0, img.size.height > 0 {
-            let artwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
-            info[MPMediaItemPropertyArtwork] = artwork
+            info[MPMediaItemPropertyArtwork] = Self.createNonisolatedArtwork(image: img)
         }
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// Helper nonisolated untuk membuat MPMediaItemArtwork.
+    /// PENTING: Closure requestHandler dipanggil oleh MediaPlayer daemon di background queue (`*/accessQueue`).
+    /// Fungsi ini wajib nonisolated & @Sendable agar runtime Swift 6 tidak melempar `_dispatch_assert_queue_fail` (SIGTRAP).
+    private nonisolated static func createNonisolatedArtwork(image: UIImage) -> MPMediaItemArtwork {
+        return MPMediaItemArtwork(boundsSize: image.size) { @Sendable _ in
+            return image
+        }
     }
 
     public func loadAndPlay(track: Track) {
