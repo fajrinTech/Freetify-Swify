@@ -101,6 +101,14 @@ public final class AudioPlayerService {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
+    /// Refresh info Lock Screen hanya jika sudah lewat ~1 detik sejak refresh terakhir
+    private func refreshNowPlayingIfNeeded() {
+        let now = Date().timeIntervalSinceReferenceDate
+        guard now - lastNowPlayingRefreshTime >= 1.0 else { return }
+        lastNowPlayingRefreshTime = now
+        updateNowPlayingInfo()
+    }
+
     public func loadAndPlay(track: Track) {
         self.currentTrack = track
         self.duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
@@ -139,12 +147,16 @@ public final class AudioPlayerService {
             self.player = newPlayer
             newPlayer.play()
 
-            // Observer waktu diatur satu kali untuk instance player
+            // Observer waktu diatur satu kali untuk instance player.
+            // PENTING: jangan pakai MainActor.assumeIsolated di sini — callback periodic time
+            // observer dapat di-deliver dari queue internal AVFoundation saat replaceCurrentItem
+            // beruntun, dan assumeIsolated akan precondition-crash (EXC_BREAKPOINT).
+            // Hop eksplisit via Task { @MainActor } yang tidak bisa crash.
             let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
             self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-                MainActor.assumeIsolated {
+                let sec = CMTimeGetSeconds(time)
+                Task { @MainActor [weak self] in
                     guard let self = self else { return }
-                    let sec = CMTimeGetSeconds(time)
                     if sec.isFinite && sec >= 0 {
                         self.currentTime = sec
                     }
@@ -154,6 +166,8 @@ public final class AudioPlayerService {
                             self.duration = d
                         }
                     }
+                    // Sinkronkan Lock Screen / Control Center periodik (throttle ~1 detik)
+                    self.refreshNowPlayingIfNeeded()
                 }
             }
         }
@@ -176,10 +190,13 @@ public final class AudioPlayerService {
 
         // Unduh cover album untuk Lock Screen
         if let artworkURL = track.artworkURL {
+            let trackID = track.id
             Task {
                 do {
                     let (data, _) = try await URLSession.shared.data(from: artworkURL)
                     if let img = UIImage(data: data) {
+                        // Race guard: jangan timpa artwork lagu lain jika user sudah pindah lagu
+                        guard trackID == self.currentTrack?.id else { return }
                         self.updateNowPlayingInfo(artworkImage: img)
                     }
                 } catch {
