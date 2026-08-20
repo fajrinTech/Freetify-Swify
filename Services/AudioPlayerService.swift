@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import UIKit
 
 /// Layanan inti pemutar audio native iOS berbasis standar resmi Apple AVFoundation dengan transisi Fade-In halus
 @Observable
@@ -75,15 +76,14 @@ public final class AudioPlayerService {
             }
         }
 
-        // Auto-play lagu selanjutnya saat lagu selesai
+        // Auto-play lagu selanjutnya saat lagu selesai (queue: nil agar ditangkap background daemon)
         self.itemEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
-            queue: .main
+            queue: nil
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self = self else { return }
-                self.onTrackFinished?()
+            Task { @MainActor in
+                self?.onTrackFinished?()
             }
         }
 
@@ -126,6 +126,14 @@ public final class AudioPlayerService {
         fadeTask = nil
 
         guard let activePlayer = player else { return }
+
+        // ponytail: saat aplikasi di background, langsung set volume 1.0 agar tidak disuspensi oleh iOS
+        if UIApplication.shared.applicationState != .active {
+            activePlayer.volume = 1.0
+            activePlayer.play()
+            return
+        }
+
         activePlayer.volume = 0.0
         activePlayer.play()
 
