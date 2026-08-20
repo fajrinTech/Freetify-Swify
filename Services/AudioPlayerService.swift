@@ -128,10 +128,14 @@ public final class AudioPlayerService {
         ensureAudioSession()
         ensureRemoteCommandCenter()
 
-        // 3. Hapus observer item lama
+        // 3. Hapus semua observer lama (item-end & time) sebelum membangun player baru
         if let obs = itemEndObserver {
             NotificationCenter.default.removeObserver(obs)
             itemEndObserver = nil
+        }
+        if let obs = timeObserver {
+            player?.removeTimeObserver(obs)
+            timeObserver = nil
         }
 
         // 4. Resolve URL pemutaran: gunakan cache lokal jika valid, atau stream dari cloud
@@ -146,39 +150,36 @@ public final class AudioPlayerService {
             }
         }
 
-        // 6. Putar audio
-        if let existingPlayer = player {
-            existingPlayer.replaceCurrentItem(with: playerItem)
-            existingPlayer.volume = 1.0
-            existingPlayer.play()
-        } else {
-            let newPlayer = AVPlayer(playerItem: playerItem)
-            newPlayer.volume = 1.0
-            self.player = newPlayer
-            newPlayer.play()
+        // 6. Putar audio — pakai AVPlayer BARU per lagu, bukan replaceCurrentItem pada player lama.
+        //    replaceCurrentItem beruntun saat tap lagu cepat dilaporkan crash di AVFoundation
+        //    (iOS 17/18/26). Player baru per lagu menghilangkan seluruh kelas crash tersebut dan
+        //    memastikan tidak ada cross-item stale state.
+        let newPlayer = AVPlayer(playerItem: playerItem)
+        newPlayer.volume = 1.0
+        newPlayer.play()
+        self.player = newPlayer
 
-            // Observer waktu periodik: diatur satu kali untuk instance player.
-            // Blok observer bersifat @Sendable (nonisolated) — jangan akses state MainActor
-            // langsung (compile error di Swift 6) dan jangan pakai MainActor.assumeIsolated
-            // (bisa precondition-crash jika AVFoundation deliver dari queue internal).
-            // Hop eksplisit via Task { @MainActor } yang aman di compile & runtime.
-            let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
-            self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-                let sec = CMTimeGetSeconds(time)
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    if sec.isFinite && sec >= 0 {
-                        self.currentTime = sec
-                    }
-                    if let item = self.player?.currentItem {
-                        let d = CMTimeGetSeconds(item.duration)
-                        if d.isFinite && d > 0 {
-                            self.duration = d
-                        }
-                    }
-                    // Sinkronkan Lock Screen / Control Center periodik (throttle ~1 detik)
-                    self.refreshNowPlayingIfNeeded()
+        // Observer waktu periodik diatur per-instance player.
+        // Blok observer bersifat @Sendable (nonisolated) — jangan akses state MainActor
+        // langsung (compile error di Swift 6) dan jangan pakai MainActor.assumeIsolated
+        // (bisa precondition-crash jika AVFoundation deliver dari queue internal).
+        // Hop eksplisit via Task { @MainActor } yang aman di compile & runtime.
+        let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
+        self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            let sec = CMTimeGetSeconds(time)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if sec.isFinite && sec >= 0 {
+                    self.currentTime = sec
                 }
+                if let item = self.player?.currentItem {
+                    let d = CMTimeGetSeconds(item.duration)
+                    if d.isFinite && d > 0 {
+                        self.duration = d
+                    }
+                }
+                // Sinkronkan Lock Screen / Control Center periodik (throttle ~1 detik)
+                self.refreshNowPlayingIfNeeded()
             }
         }
 
