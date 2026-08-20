@@ -1,131 +1,27 @@
 import SwiftUI
 import UIKit
 
-/// Metrik dimensi Liquid Glass TabBar berbasis standar industri UnionTabView
+/// Metrik dimensi Liquid Glass TabBar berbasis standar industri
 public enum LiquidGlassTabBarMetrics {
-    public static let contentHeight: CGFloat = 56
-    public static let innerPadding: CGFloat = 4.67
-    public static var totalHeight: CGFloat { contentHeight + (innerPadding * 2) }
+    public static let contentHeight: CGFloat = 58
+    public static let bubbleHeight: CGFloat = 48
+    public static let margin: CGFloat = 5
     public static let restingBottomInset: CGFloat = 6
 }
 
-/// Representasi UIKit UISegmentedControl sebagai mesin penggerak gestur dan seleksi Liquid Glass bawaan iOS
-@MainActor
-public struct InteractiveGlassSegmentedControl: UIViewRepresentable {
-    public var size: CGSize
-    public var selectedIndex: Binding<Int>
-    public var tabCount: Int
-    public var barTint: Color
-    public var onReselect: ((Int) -> Void)?
-
-    public init(
-        size: CGSize,
-        selectedIndex: Binding<Int>,
-        tabCount: Int,
-        barTint: Color = .gray.opacity(0.15),
-        onReselect: ((Int) -> Void)? = nil
-    ) {
-        self.size = size
-        self.selectedIndex = selectedIndex
-        self.tabCount = tabCount
-        self.barTint = barTint
-        self.onReselect = onReselect
-    }
-
-    public func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-
-    public func makeUIView(context: Context) -> UISegmentedControl {
-        let items = (0..<tabCount).map { _ in "" }
-        let control = UISegmentedControl(items: items)
-        control.selectedSegmentIndex = selectedIndex.wrappedValue
-        control.selectedSegmentTintColor = UIColor(barTint)
-        control.backgroundColor = .clear
-
-        DispatchQueue.main.async {
-            for subview in control.subviews {
-                if subview is UIImageView && subview != control.subviews.last {
-                    subview.alpha = 0
-                }
-            }
-        }
-
-        control.addTarget(
-            context.coordinator,
-            action: #selector(Coordinator.segmentChanged(_:)),
-            for: .valueChanged
-        )
-
-        // Deteksi reselection (ketuk tab yang sedang aktif)
-        let reselectRecognizer = UITapGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handleTap(_:))
-        )
-        reselectRecognizer.cancelsTouchesInView = false
-        control.addGestureRecognizer(reselectRecognizer)
-
-        return control
-    }
-
-    public func updateUIView(_ uiView: UISegmentedControl, context: Context) {
-        context.coordinator.parent = self
-        if uiView.numberOfSegments != tabCount {
-            uiView.removeAllSegments()
-            for i in 0..<tabCount {
-                uiView.insertSegment(withTitle: "", at: i, animated: false)
-            }
-        }
-        if uiView.selectedSegmentIndex != selectedIndex.wrappedValue {
-            uiView.selectedSegmentIndex = selectedIndex.wrappedValue
-        }
-    }
-
-    public func sizeThatFits(_ proposal: ProposedViewSize, uiView: UISegmentedControl, context: Context) -> CGSize? {
-        size
-    }
-
-    public final class Coordinator: NSObject {
-        var parent: InteractiveGlassSegmentedControl
-
-        init(parent: InteractiveGlassSegmentedControl) {
-            self.parent = parent
-        }
-
-        @MainActor @objc func segmentChanged(_ control: UISegmentedControl) {
-            let newIndex = control.selectedSegmentIndex
-            if newIndex >= 0 && newIndex < parent.tabCount && newIndex != parent.selectedIndex.wrappedValue {
-                let generator = UIImpactFeedbackGenerator(style: .light)
-                generator.impactOccurred()
-                parent.selectedIndex.wrappedValue = newIndex
-            }
-        }
-
-        @MainActor @objc func handleTap(_ gesture: UITapGestureRecognizer) {
-            guard let control = gesture.view as? UISegmentedControl,
-                  control.numberOfSegments > 0 else { return }
-
-            let segmentWidth = control.bounds.width / CGFloat(control.numberOfSegments)
-            guard segmentWidth > 0 else { return }
-
-            let location = gesture.location(in: control)
-            let index = min(control.numberOfSegments - 1, max(0, Int(location.x / segmentWidth)))
-
-            if index == parent.selectedIndex.wrappedValue {
-                let generator = UIImpactFeedbackGenerator(style: .light)
-                generator.impactOccurred()
-                parent.onReselect?(index)
-            }
-        }
-    }
-}
-
-/// Floating Liquid Glass TabBar
-/// Mengadopsi arsitektur terbaik dari UnionTabView, LiquidGlassCheatsheet, dan FabBar
+/// Floating 3D Liquid Glass Bottom Navigation Bar (SwiftUI)
+/// Menggabungkan:
+/// 1. Lensa Kaca Cembung 3D yang jelas dan terlihat (Specular Glare + Ambient Cyan Refraction + Rim Reflection)
+/// 2. Gesture usap/geser jari real-time 1:1 (Lensa kaca mengikuti jari secara instan dan snap ke tab tujuan)
+/// 3. Ketuk langsung (Tap) dengan animasi pegas fluida dan haptic feedback ringan
+/// 4. Reselection callback (ketuk ulang tab aktif untuk aksi scroll-to-top)
 public struct LiquidGlassTabBar: View {
     @Binding var selectedTab: TabItem
     @Environment(\.colorScheme) private var colorScheme
     public var onReselect: ((TabItem) -> Void)? = nil
+
+    @State private var dragPositionX: CGFloat? = nil
+    @State private var isTouching: Bool = false
 
     public init(
         selectedTab: Binding<TabItem>,
@@ -137,82 +33,198 @@ public struct LiquidGlassTabBar: View {
 
     private let tabs = TabItem.allCases
 
-    private var selectedIndexBinding: Binding<Int> {
-        Binding(
-            get: { selectedTab.id },
-            set: { newId in
-                if let newTab = TabItem(rawValue: newId) {
-                    selectedTab = newTab
-                }
-            }
-        )
-    }
-
     public var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs) { tab in
-                let isSelected = (selectedTab == tab)
+        GeometryReader { geo in
+            let totalWidth = geo.size.width
+            let tabWidth = totalWidth / CGFloat(tabs.count)
+            let bubbleWidth = tabWidth - (LiquidGlassTabBarMetrics.margin * 2)
+            let selectedIndex = tabs.firstIndex(of: selectedTab) ?? 0
+            let restingX = (CGFloat(selectedIndex) * tabWidth) + LiquidGlassTabBarMetrics.margin
 
-                VStack(spacing: 3) {
-                    Image(systemName: isSelected ? tab.activeIcon : tab.icon)
-                        .font(.system(size: 19, weight: isSelected ? .bold : .medium))
-                        .symbolEffect(.bounce, value: isSelected)
-                        .foregroundColor(isSelected ? Color.white : Color.white.opacity(0.45))
-                        .scaleEffect(isSelected ? 1.08 : 1.0)
-                        .animation(.spring(response: 0.35, dampingFraction: 0.65), value: isSelected)
-
-                    Text(tab.title)
-                        .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                        .foregroundColor(isSelected ? Color.white : Color.white.opacity(0.45))
+            // Posisi X lensa cairan kaca: mengikuti sentuhan jari atau diam di tab aktif
+            let bubbleX: CGFloat = {
+                if let touchX = dragPositionX {
+                    let rawX = touchX - bubbleWidth / 2
+                    let minX = LiquidGlassTabBarMetrics.margin
+                    let maxX = totalWidth - bubbleWidth - LiquidGlassTabBarMetrics.margin
+                    return max(minX, min(rawX, maxX))
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: LiquidGlassTabBarMetrics.contentHeight)
-                .contentShape(Rectangle())
-            }
-        }
-        .allowsHitTesting(false)
-        .background {
-            GeometryReader { geo in
-                InteractiveGlassSegmentedControl(
-                    size: geo.size,
-                    selectedIndex: selectedIndexBinding,
-                    tabCount: tabs.count,
-                    barTint: Color.white.opacity(0.20),
-                    onReselect: { index in
-                        if index < tabs.count {
-                            onReselect?(tabs[index])
+                return restingX
+            }()
+
+            ZStack(alignment: .leading) {
+                // 1. Base Dark Frosted Glass Capsule Track (Lintasan Kaca Gelap Luar)
+                Capsule()
+                    .fill(Color(hex: "0D1117").opacity(0.92))
+                    .overlay {
+                        Capsule()
+                            .fill(.ultraThinMaterial.opacity(0.35))
+                    }
+                    .overlay {
+                        // Convex Specular Outer Border (Terang di atas, pudar di bawah)
+                        Capsule()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: colorScheme == .dark
+                                        ? [Color.white.opacity(0.32), Color.white.opacity(0.04)]
+                                        : [Color.white.opacity(0.75), Color.white.opacity(0.12)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 1
+                            )
+                    }
+                    .frame(height: LiquidGlassTabBarMetrics.contentHeight)
+                    .shadow(color: Color.black.opacity(0.45), radius: 16, x: 0, y: 8)
+
+                // 2. Visible 3D Crystal Liquid Convex Glass Lens Bubble (Lensa Kaca Cembung 3D)
+                CrystalConvexGlassLens()
+                    .frame(width: bubbleWidth, height: LiquidGlassTabBarMetrics.bubbleHeight)
+                    .offset(x: bubbleX)
+                    .scaleEffect(
+                        x: isTouching ? 1.05 : 1.0,
+                        y: isTouching ? 0.96 : 1.0,
+                        anchor: .center
+                    )
+                    .animation(
+                        isTouching
+                            ? .interactiveSpring(response: 0.15, dampingFraction: 0.88)
+                            : .spring(response: 0.38, dampingFraction: 0.65),
+                        value: bubbleX
+                    )
+                    .animation(.spring(response: 0.28, dampingFraction: 0.65), value: isTouching)
+
+                // 3. Tab Items (Ikon & Label)
+                HStack(spacing: 0) {
+                    ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                        let isSelected = (selectedTab == tab)
+
+                        VStack(spacing: 3) {
+                            Image(systemName: isSelected ? tab.activeIcon : tab.icon)
+                                .font(.system(size: 19, weight: isSelected ? .bold : .medium))
+                                .symbolEffect(.bounce, value: isSelected)
+                                .foregroundColor(isSelected ? Color.white : Color.white.opacity(0.45))
+                                .scaleEffect(isSelected ? 1.10 : 1.0)
+                                .animation(.spring(response: 0.35, dampingFraction: 0.65), value: isSelected)
+
+                            Text(tab.title)
+                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                                .foregroundColor(isSelected ? Color.white : Color.white.opacity(0.45))
+                        }
+                        .frame(width: tabWidth, height: LiquidGlassTabBarMetrics.contentHeight)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if selectedTab != tab {
+                                triggerHaptic()
+                                withAnimation(.spring(response: 0.38, dampingFraction: 0.65)) {
+                                    selectedTab = tab
+                                }
+                            } else {
+                                triggerHaptic()
+                                onReselect?(tab)
+                            }
                         }
                     }
-                )
+                }
             }
+            .frame(height: LiquidGlassTabBarMetrics.contentHeight)
+            .contentShape(Rectangle())
+            .gesture(
+                // Gesture Usap/Geser Jari Real-Time 1:1
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        isTouching = true
+                        dragPositionX = value.location.x
+
+                        let clampedX = max(0, min(value.location.x, totalWidth - 1))
+                        let targetIndex = Int(clampedX / tabWidth)
+                        let safeIndex = max(0, min(targetIndex, tabs.count - 1))
+                        let targetTab = tabs[safeIndex]
+
+                        if selectedTab != targetTab {
+                            triggerHaptic()
+                            selectedTab = targetTab
+                        }
+                    }
+                    .onEnded { value in
+                        let clampedX = max(0, min(value.location.x, totalWidth - 1))
+                        let targetIndex = Int(clampedX / tabWidth)
+                        let safeIndex = max(0, min(targetIndex, tabs.count - 1))
+
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.65)) {
+                            selectedTab = tabs[safeIndex]
+                            dragPositionX = nil
+                            isTouching = false
+                        }
+                    }
+            )
         }
-        .padding(LiquidGlassTabBarMetrics.innerPadding)
-        .background {
-            // Container Kaca Kapsul dengan Convex Specular Highlight
-            Capsule()
-                .fill(Color(hex: "0D1117").opacity(0.88))
-                .overlay {
-                    Capsule()
-                        .fill(.ultraThinMaterial.opacity(0.35))
-                }
-                .overlay {
-                    // Convex Specular Border: terang di atas, pudar di bawah
-                    Capsule()
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: colorScheme == .dark
-                                    ? [Color.white.opacity(0.32), Color.white.opacity(0.04)]
-                                    : [Color.white.opacity(0.75), Color.white.opacity(0.12)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1
-                        )
-                }
-        }
-        .shadow(color: Color.black.opacity(0.40), radius: 16, x: 0, y: 8)
-        .frame(maxWidth: CGFloat(tabs.count) * 110)
+        .frame(height: LiquidGlassTabBarMetrics.contentHeight)
         .padding(.horizontal, 20)
         .padding(.bottom, LiquidGlassTabBarMetrics.restingBottomInset)
+    }
+
+    private func triggerHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+}
+
+// MARK: - Sub-komponen Lensa Kaca Cembung 3D (Crystal Convex Glass Lens)
+public struct CrystalConvexGlassLens: View {
+    public init() {}
+
+    public var body: some View {
+        ZStack {
+            // 1. Lapisan Kaca Kristal Translucent + Refractive Ambient Core
+            Capsule()
+                .fill(.ultraThinMaterial.opacity(0.95))
+                .overlay {
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.30),
+                                    Color(hex: "00F2FE").opacity(0.14),
+                                    Color.white.opacity(0.08)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+                .clipShape(Capsule())
+                .shadow(color: Color(hex: "00F2FE").opacity(0.28), radius: 10, y: 3)
+
+            // 2. Specular Top Convex Glare (Pantulan Kilau Kaca Cembung Elips yang Nyata & Jelas)
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.70),
+                            Color.white.opacity(0.15),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                )
+                .padding(2)
+
+            // 3. Specular Curved Rim Reflection (Pantulan Garis Kaca Lengkung Bawah)
+            Capsule()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.85),
+                            Color.white.opacity(0.15),
+                            Color(hex: "00F2FE").opacity(0.40)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.2
+                )
+        }
     }
 }
