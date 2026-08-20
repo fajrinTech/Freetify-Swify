@@ -135,8 +135,17 @@ public final class AudioPlayerService {
             itemEndObserver = nil
         }
 
-        let playerItem = AVPlayerItem(url: track.audioURL)
+        // Gunakan file lokal disk jika sudah di-cache (100% offline / 0 KB kuota)
+        let playbackURL = LocalCacheService.shared.getLocalAudioURL(trackID: track.id) ?? track.audioURL
+        let playerItem = AVPlayerItem(url: playbackURL)
         playerItem.preferredForwardBufferDuration = 5.0
+
+        // Jika memutar via stream cloud, unduh di background agar siap offline pada pemutaran selanjutnya
+        if playbackURL == track.audioURL {
+            Task {
+                await LocalCacheService.shared.cacheAudioFile(trackID: track.id, from: track.audioURL)
+            }
+        }
 
         if let existingPlayer = player {
             existingPlayer.replaceCurrentItem(with: playerItem)
@@ -201,6 +210,7 @@ public final class AudioPlayerService {
     }
 
     public func play() {
+        guard !isPlaying else { return } // Pelindung anti double-play / double-trigger
         setupAudioSession()
         fadeInAudio(duration: 0.25)
         self.isPlaying = true
