@@ -5,7 +5,7 @@ import Observation
 /// ViewModel pengatur status pemutaran musik, antrean lagu, dan kontrol timeline
 @Observable
 @MainActor
-public final class PlayerViewModel {
+public final class PlayerViewModel: AudioPlayerDelegate {
     public var queue: [Track] = []
     public var queueIndex: Int = 0
 
@@ -19,15 +19,21 @@ public final class PlayerViewModel {
     private let cacheService = LocalCacheService.shared
 
     public init() {
-        audioService.onTrackFinished = { [weak self] in
-            self?.handleTrackFinished()
-        }
-        audioService.onRemoteNext = { [weak self] in
-            self?.nextTrack()
-        }
-        audioService.onRemotePrevious = { [weak self] in
-            self?.previousTrack()
-        }
+        // Delegate pattern: aman untuk Swift 6 strict concurrency, tidak ada stored closure
+        audioService.delegate = self
+    }
+
+    // MARK: - AudioPlayerDelegate
+    public func audioPlayerDidFinishTrack() {
+        handleTrackFinished()
+    }
+
+    public func audioPlayerDidRequestNextTrack() {
+        nextTrack()
+    }
+
+    public func audioPlayerDidRequestPreviousTrack() {
+        previousTrack()
     }
 
     public var currentTrack: Track? {

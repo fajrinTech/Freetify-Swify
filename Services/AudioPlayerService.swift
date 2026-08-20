@@ -3,6 +3,14 @@ import AVFoundation
 import UIKit
 import MediaPlayer
 
+/// Protokol delegate untuk event dari AudioPlayerService (menghilangkan closure callbacks yang crash di Swift 6)
+@MainActor
+public protocol AudioPlayerDelegate: AnyObject {
+    func audioPlayerDidFinishTrack()
+    func audioPlayerDidRequestNextTrack()
+    func audioPlayerDidRequestPreviousTrack()
+}
+
 /// Layanan inti pemutar audio native iOS berbasis standar resmi Apple AVFoundation & MediaPlayer
 @Observable
 @MainActor
@@ -17,13 +25,12 @@ public final class AudioPlayerService {
     private var lastNowPlayingRefreshTime: TimeInterval = 0.0
     private var remoteCommandsRegistered = false
 
+    public weak var delegate: AudioPlayerDelegate?
+
     public var currentTrack: Track?
     public var isPlaying: Bool = false
     public var currentTime: Double = 0.0
     public var duration: Double = 180.0
-    public var onTrackFinished: (() -> Void)?
-    public var onRemoteNext: (() -> Void)?
-    public var onRemotePrevious: (() -> Void)?
 
     // ponytail: init kosong, semua setup dilakukan lazy saat lagu pertama diputar
     public init() {}
@@ -31,7 +38,7 @@ public final class AudioPlayerService {
     private func ensureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default)
+            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
             try session.setActive(true)
         } catch {
             print("[AudioPlayerService] AudioSession setup error: \(error.localizedDescription)")
@@ -58,11 +65,11 @@ public final class AudioPlayerService {
             return .success
         }
         cc.nextTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.onRemoteNext?() }
+            Task { @MainActor in self?.delegate?.audioPlayerDidRequestNextTrack() }
             return .success
         }
         cc.previousTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.onRemotePrevious?() }
+            Task { @MainActor in self?.delegate?.audioPlayerDidRequestPreviousTrack() }
             return .success
         }
         cc.changePlaybackPositionCommand.addTarget { [weak self] event in
@@ -110,33 +117,36 @@ public final class AudioPlayerService {
     }
 
     public func loadAndPlay(track: Track) {
+        // 1. Reset state
         self.currentTrack = track
         self.duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
         self.currentTime = 0.0
         self.currentArtwork = nil
         self.lastNowPlayingRefreshTime = 0.0
 
+        // 2. Setup audio session & remote commands (lazy, sekali saja)
         ensureAudioSession()
         ensureRemoteCommandCenter()
 
-        // Hapus observer item lama
+        // 3. Hapus observer item lama
         if let obs = itemEndObserver {
             NotificationCenter.default.removeObserver(obs)
             itemEndObserver = nil
         }
 
-        // Gunakan file lokal disk jika sudah tervalidasi utuh (> 100 KB), atau stream dari cloud
+        // 4. Resolve URL pemutaran: gunakan cache lokal jika valid, atau stream dari cloud
         let playbackURL = LocalCacheService.shared.getLocalAudioURL(trackID: track.id) ?? track.audioURL
         let playerItem = AVPlayerItem(url: playbackURL)
         playerItem.preferredForwardBufferDuration = 5.0
 
-        // Jika memutar via stream cloud, unduh di background secara aman
+        // 5. Jika memutar via stream cloud, unduh di background secara aman
         if playbackURL == track.audioURL {
-            Task {
+            Task.detached(priority: .background) {
                 await LocalCacheService.shared.cacheAudioFile(trackID: track.id, from: track.audioURL)
             }
         }
 
+        // 6. Putar audio
         if let existingPlayer = player {
             existingPlayer.replaceCurrentItem(with: playerItem)
             existingPlayer.volume = 1.0
@@ -147,57 +157,53 @@ public final class AudioPlayerService {
             self.player = newPlayer
             newPlayer.play()
 
-            // Observer waktu diatur satu kali untuk instance player.
-            // PENTING: jangan pakai MainActor.assumeIsolated di sini — callback periodic time
-            // observer dapat di-deliver dari queue internal AVFoundation saat replaceCurrentItem
-            // beruntun, dan assumeIsolated akan precondition-crash (EXC_BREAKPOINT).
-            // Hop eksplisit via Task { @MainActor } yang tidak bisa crash.
-            let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
+            // Observer waktu periodik: diatur satu kali untuk instance player.
+            // Semua state update dilakukan via DispatchQueue.main.async (bukan Task)
+            // untuk menghindari overhead spawning Task 5x/detik dan Swift 6 Sendable race.
+            let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
             self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+                guard let self else { return }
                 let sec = CMTimeGetSeconds(time)
-                Task { @MainActor [weak self] in
-                    guard let self = self else { return }
-                    if sec.isFinite && sec >= 0 {
-                        self.currentTime = sec
-                    }
-                    if let item = self.player?.currentItem {
-                        let d = CMTimeGetSeconds(item.duration)
-                        if d.isFinite && d > 0 {
-                            self.duration = d
-                        }
-                    }
-                    // Sinkronkan Lock Screen / Control Center periodik (throttle ~1 detik)
-                    self.refreshNowPlayingIfNeeded()
+                if sec.isFinite && sec >= 0 {
+                    self.currentTime = sec
                 }
+                if let item = self.player?.currentItem {
+                    let d = CMTimeGetSeconds(item.duration)
+                    if d.isFinite && d > 0 {
+                        self.duration = d
+                    }
+                }
+                self.refreshNowPlayingIfNeeded()
             }
         }
 
-        // Auto-play lagu selanjutnya saat lagu selesai
+        // 7. Observer akhir lagu: auto-advance ke lagu berikutnya
+        let trackID = track.id
         self.itemEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
-            queue: nil
+            queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self = self else { return }
-                self.startBackgroundTask()
-                self.onTrackFinished?()
-            }
+            guard let self else { return }
+            guard trackID == self.currentTrack?.id else { return }
+            self.startBackgroundTask()
+            self.delegate?.audioPlayerDidFinishTrack()
         }
 
+        // 8. Update state
         self.isPlaying = true
         updateNowPlayingInfo()
 
-        // Unduh cover album untuk Lock Screen
+        // 9. Download cover album untuk Lock Screen
         if let artworkURL = track.artworkURL {
-            let trackID = track.id
-            Task {
+            Task.detached(priority: .background) { [weak self] in
                 do {
                     let (data, _) = try await URLSession.shared.data(from: artworkURL)
                     if let img = UIImage(data: data) {
-                        // Race guard: jangan timpa artwork lagu lain jika user sudah pindah lagu
-                        guard trackID == self.currentTrack?.id else { return }
-                        self.updateNowPlayingInfo(artworkImage: img)
+                        await MainActor.run {
+                            guard trackID == self?.currentTrack?.id else { return }
+                            self?.updateNowPlayingInfo(artworkImage: img)
+                        }
                     }
                 } catch {
                     // ponytail: artwork gagal = tidak masalah, lagu tetap jalan
@@ -205,7 +211,7 @@ public final class AudioPlayerService {
             }
         }
 
-        // Selesaikan background task setelah pemutaran lagu baru berjalan
+        // 10. Selesaikan background task setelah pemutaran lagu baru berjalan
         Task {
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             self.endBackgroundTask()
