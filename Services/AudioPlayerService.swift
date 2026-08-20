@@ -3,7 +3,7 @@ import AVFoundation
 import UIKit
 import MediaPlayer
 
-/// Protokol delegate untuk event dari AudioPlayerService (menghilangkan closure callbacks yang crash di Swift 6)
+/// Protokol delegate untuk event dari AudioPlayerService (aman untuk Swift 6 strict concurrency)
 @MainActor
 public protocol AudioPlayerDelegate: AnyObject {
     func audioPlayerDidFinishTrack()
@@ -22,7 +22,6 @@ public final class AudioPlayerService {
     private var itemEndObserver: Any?
     private var bgTaskID: UIBackgroundTaskIdentifier = .invalid
     private var currentArtwork: UIImage? = nil
-    private var lastNowPlayingRefreshTime: TimeInterval = 0.0
     private var remoteCommandsRegistered = false
 
     public weak var delegate: AudioPlayerDelegate?
@@ -52,26 +51,37 @@ public final class AudioPlayerService {
 
         let cc = MPRemoteCommandCenter.shared()
 
+        cc.playCommand.isEnabled = true
         cc.playCommand.addTarget { [weak self] _ in
             Task { @MainActor in self?.play() }
             return .success
         }
+
+        cc.pauseCommand.isEnabled = true
         cc.pauseCommand.addTarget { [weak self] _ in
             Task { @MainActor in self?.pause() }
             return .success
         }
+
+        cc.togglePlayPauseCommand.isEnabled = true
         cc.togglePlayPauseCommand.addTarget { [weak self] _ in
             Task { @MainActor in self?.togglePlayPause() }
             return .success
         }
+
+        cc.nextTrackCommand.isEnabled = true
         cc.nextTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor in self?.delegate?.audioPlayerDidRequestNextTrack() }
             return .success
         }
+
+        cc.previousTrackCommand.isEnabled = true
         cc.previousTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor in self?.delegate?.audioPlayerDidRequestPreviousTrack() }
             return .success
         }
+
+        cc.changePlaybackPositionCommand.isEnabled = true
         cc.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let posEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             Task { @MainActor in self?.seek(to: posEvent.positionTime) }
@@ -79,6 +89,7 @@ public final class AudioPlayerService {
         }
     }
 
+    // MARK: - Lock Screen Now Playing Info (Event-Driven sesuai Rekomendasi Apple)
     public func updateNowPlayingInfo(artworkImage: UIImage? = nil) {
         guard let track = currentTrack else {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -101,19 +112,13 @@ public final class AudioPlayerService {
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]
 
+        // Sanitasi artwork: Validasi gambar valid sebelum membuat MPMediaItemArtwork
         if let img = currentArtwork, img.cgImage != nil, img.size.width > 0, img.size.height > 0 {
-            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+            let artwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+            info[MPMediaItemPropertyArtwork] = artwork
         }
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-    }
-
-    /// Refresh info Lock Screen hanya jika sudah lewat ~1 detik sejak refresh terakhir
-    private func refreshNowPlayingIfNeeded() {
-        let now = Date().timeIntervalSinceReferenceDate
-        guard now - lastNowPlayingRefreshTime >= 1.0 else { return }
-        lastNowPlayingRefreshTime = now
-        updateNowPlayingInfo()
     }
 
     public func loadAndPlay(track: Track) {
@@ -122,7 +127,6 @@ public final class AudioPlayerService {
         self.duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
         self.currentTime = 0.0
         self.currentArtwork = nil
-        self.lastNowPlayingRefreshTime = 0.0
 
         // 2. Setup audio session & remote commands (lazy, sekali saja)
         ensureAudioSession()
@@ -150,20 +154,13 @@ public final class AudioPlayerService {
             }
         }
 
-        // 6. Putar audio — pakai AVPlayer BARU per lagu, bukan replaceCurrentItem pada player lama.
-        //    replaceCurrentItem beruntun saat tap lagu cepat dilaporkan crash di AVFoundation
-        //    (iOS 17/18/26). Player baru per lagu menghilangkan seluruh kelas crash tersebut dan
-        //    memastikan tidak ada cross-item stale state.
+        // 6. Putar audio — pakai AVPlayer BARU per lagu untuk mencegah replaceCurrentItem churn crash
         let newPlayer = AVPlayer(playerItem: playerItem)
         newPlayer.volume = 1.0
         newPlayer.play()
         self.player = newPlayer
 
-        // Observer waktu periodik diatur per-instance player.
-        // Blok observer bersifat @Sendable (nonisolated) — jangan akses state MainActor
-        // langsung (compile error di Swift 6) dan jangan pakai MainActor.assumeIsolated
-        // (bisa precondition-crash jika AVFoundation deliver dari queue internal).
-        // Hop eksplisit via Task { @MainActor } yang aman di compile & runtime.
+        // Observer waktu periodik: hanya bertugas mengupdate UI SwiftUI internal (tanpa update NowPlaying di loop)
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
         self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             let sec = CMTimeGetSeconds(time)
@@ -178,8 +175,6 @@ public final class AudioPlayerService {
                         self.duration = d
                     }
                 }
-                // Sinkronkan Lock Screen / Control Center periodik (throttle ~1 detik)
-                self.refreshNowPlayingIfNeeded()
             }
         }
 
@@ -190,26 +185,22 @@ public final class AudioPlayerService {
             object: playerItem,
             queue: .main
         ) { [weak self] _ in
-            // Blok @Sendable nonisolated — akses MainActor harus lewat hop Task
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                // Anti stale event: abaikan notifikasi dari item lagu yang sudah diganti
                 guard trackID == self.currentTrack?.id else { return }
                 self.startBackgroundTask()
                 self.delegate?.audioPlayerDidFinishTrack()
             }
         }
 
-        // 8. Update state
+        // 8. Update state & kirim nowPlayingInfo (Event 1: Lagu Baru Dimulai)
         self.isPlaying = true
         updateNowPlayingInfo()
 
-        // 9. Download cover album untuk Lock Screen
+        // 9. Download cover album untuk Lock Screen (Event 2: Artwork Siap)
         if let artworkURL = track.artworkURL {
             let trackID = track.id
             Task.detached(priority: .background) {
-                // Kirim Data (Sendable) lintas isolation; UIImage di-decode di MainActor.
-                // Capture self kuat aman di sini: service adalah singleton & task berumur pendek.
                 do {
                     let (data, _) = try await URLSession.shared.data(from: artworkURL)
                     await MainActor.run {
@@ -218,7 +209,7 @@ public final class AudioPlayerService {
                         self.updateNowPlayingInfo(artworkImage: img)
                     }
                 } catch {
-                    // ponytail: artwork gagal = tidak masalah, lagu tetap jalan
+                    // Artwork gagal diunduh: lagu tetap jalan normal tanpa artwork
                 }
             }
         }
@@ -235,13 +226,13 @@ public final class AudioPlayerService {
         player?.volume = 1.0
         player?.play()
         self.isPlaying = true
-        updateNowPlayingInfo()
+        updateNowPlayingInfo() // Event: Playback Dilanjutkan (Rate = 1.0)
     }
 
     public func pause() {
         player?.pause()
         self.isPlaying = false
-        updateNowPlayingInfo()
+        updateNowPlayingInfo() // Event: Playback Dijeda (Rate = 0.0)
     }
 
     public func togglePlayPause() {
@@ -257,7 +248,7 @@ public final class AudioPlayerService {
         self.currentTime = seconds
         let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
         player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
-        updateNowPlayingInfo()
+        updateNowPlayingInfo() // Event: Posisi Playback Berubah (Seek)
     }
 
     // MARK: - Background Task Management
