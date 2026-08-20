@@ -12,6 +12,7 @@ public final class AudioPlayerService {
     private var timeObserver: Any?
     private var itemEndObserver: Any?
     private var fadeTask: Task<Void, Never>?
+    private var bgTaskID: UIBackgroundTaskIdentifier = .invalid
 
     public var currentTrack: Track?
     public var isPlaying: Bool = false
@@ -47,7 +48,7 @@ public final class AudioPlayerService {
         }
 
         let playerItem = AVPlayerItem(url: track.audioURL)
-        playerItem.preferredForwardBufferDuration = 10.0
+        playerItem.preferredForwardBufferDuration = 5.0
 
         if let existingPlayer = player {
             existingPlayer.replaceCurrentItem(with: playerItem)
@@ -83,13 +84,22 @@ public final class AudioPlayerService {
             queue: nil
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.onTrackFinished?()
+                guard let self = self else { return }
+                // ponytail: tahan eksekusi background agar iOS tidak membekukan app sebelum lagu baru berputar
+                self.startBackgroundTask()
+                self.onTrackFinished?()
             }
         }
 
         // Putar audio dengan transisi Fade-In yang lembut dan elegan
         fadeInAudio(duration: 0.35)
         self.isPlaying = true
+
+        // Selesaikan background task setelah pemutaran lagu baru berjalan
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            self.endBackgroundTask()
+        }
     }
 
     public func play() {
@@ -118,6 +128,23 @@ public final class AudioPlayerService {
         self.currentTime = seconds
         let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
         player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    // MARK: - Background Task Management
+    private func startBackgroundTask() {
+        endBackgroundTask()
+        bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "FreetifyAdvanceTrack") { [weak self] in
+            Task { @MainActor in
+                self?.endBackgroundTask()
+            }
+        }
+    }
+
+    private func endBackgroundTask() {
+        if bgTaskID != .invalid {
+            UIApplication.shared.endBackgroundTask(bgTaskID)
+            bgTaskID = .invalid
+        }
     }
 
     // MARK: - Smooth Audio Fade-In Swell
