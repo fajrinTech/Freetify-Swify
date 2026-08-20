@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Floating 3D Crystal Liquid Glass Bubble TabBar (Pure Monochromatic Glass + Elastic Jelly Spring Physics)
-/// Bebas dari warna RGB, 100% Kaca Kristal Bening dengan efek Kenyal/Jelly saat bergeser dan berpindah
+/// Floating Minimalist Liquid Glass TabBar (Apple VisionOS / Dynamic Island Dark Glass Pill)
+/// Tampilan bersih, elegan, dan proporsional dengan indikator tab aktif yang menyatu halus di dalam kapsul kaca
 public struct LiquidGlassTabBar: View {
     @Binding var selectedTab: TabItem
 
@@ -18,63 +18,71 @@ public struct LiquidGlassTabBar: View {
         GeometryReader { geo in
             let totalWidth = geo.size.width
             let tabWidth = totalWidth / CGFloat(tabs.count)
-            let bubbleWidth = tabWidth * 0.92
+            let indicatorWidth = tabWidth - 8
             let selectedIndex = tabs.firstIndex(of: selectedTab) ?? 0
-            let restingX = (CGFloat(selectedIndex) * tabWidth) + (tabWidth - bubbleWidth) / 2
+            let restingX = (CGFloat(selectedIndex) * tabWidth) + 4
 
-            // Posisi X lensa kaca mengikuti jari saat diusap, atau berada di tab aktif saat diam
-            let bubbleX: CGFloat = {
+            let indicatorX: CGFloat = {
                 if let touchX = dragPositionX {
-                    let clamped = max(0, min(touchX - bubbleWidth / 2, totalWidth - bubbleWidth))
+                    let clamped = max(4, min(touchX - indicatorWidth / 2, totalWidth - indicatorWidth - 4))
                     return clamped
                 }
                 return restingX
             }()
 
             ZStack(alignment: .leading) {
-                // 1. Base Dark Frosted Glass Track (Kapsul Lintasan Gelap)
+                // 1. Base Sleek Dark Frosted Glass Capsule (Kapsul Utama Kaca Gelap)
                 Capsule()
-                    .fill(Color(hex: "0C0F16").opacity(0.92))
+                    .fill(Color(hex: "0D1117").opacity(0.88))
                     .overlay {
                         Capsule()
-                            .fill(.ultraThinMaterial.opacity(0.25))
+                            .fill(.ultraThinMaterial.opacity(0.35))
                     }
                     .overlay {
-                        // Hairline Specular Border Kaca Luar
+                        // Hairline Specular Glass Border
                         Capsule()
                             .strokeBorder(
                                 LinearGradient(
-                                    colors: [Color.white.opacity(0.25), Color.white.opacity(0.05)],
+                                    colors: [
+                                        Color.white.opacity(0.20),
+                                        Color(hex: "00F2FE").opacity(0.12),
+                                        Color.white.opacity(0.04)
+                                    ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
                                 lineWidth: 1
                             )
                     }
-                    .frame(height: 64)
-                    .shadow(color: Color.black.opacity(0.55), radius: 14, x: 0, y: 7)
+                    .shadow(color: Color.black.opacity(0.45), radius: 16, x: 0, y: 8)
 
-                // 2. Pure Crystal Liquid Glass Jelly Bubble (Kenyal / Bouncy Elastic Squash & Stretch)
-                CrystalLiquidJellyBubble()
-                    .frame(width: bubbleWidth, height: 72)
-                    .offset(x: bubbleX, y: -4)
-                    // Efek kenyal (Squash & Stretch) saat ditarik/digerakkan
-                    .scaleEffect(
-                        x: isTouching ? 1.18 : 1.0,
-                        y: isTouching ? 0.88 : 1.0,
-                        anchor: .center
+                // 2. Active Tab Glass Indicator (Indikator Kaca Menyatu Halus di Dalam Track)
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.18),
+                                Color(hex: "00F2FE").opacity(0.12),
+                                Color.white.opacity(0.06)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                    // Animasi Pegas Kenyal / Bouncy Jelly Elastic (Damping 0.52)
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.8)
+                    }
+                    .frame(width: indicatorWidth, height: 48)
+                    .offset(x: indicatorX)
+                    .scaleEffect(isTouching ? 1.04 : 1.0)
                     .animation(
                         isTouching
-                            ? .interactiveSpring(response: 0.12, dampingFraction: 0.85)
-                            : .spring(response: 0.38, dampingFraction: 0.52),
-                        value: bubbleX
+                            ? .interactiveSpring(response: 0.15, dampingFraction: 0.86)
+                            : .spring(response: 0.32, dampingFraction: 0.72),
+                        value: indicatorX
                     )
-                    .animation(
-                        .spring(response: 0.35, dampingFraction: 0.50),
-                        value: isTouching
-                    )
+                    .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isTouching)
 
                 // 3. Tab Items (Ikon & Label)
                 HStack(spacing: 0) {
@@ -83,29 +91,28 @@ public struct LiquidGlassTabBar: View {
 
                         VStack(spacing: 3) {
                             Image(systemName: isSelected ? tab.activeIcon : tab.icon)
-                                .font(.system(size: 21, weight: .bold))
-                                .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.45))
-                                .scaleEffect(isSelected ? 1.16 : 1.0)
-                                .animation(.spring(response: 0.32, dampingFraction: 0.55), value: isSelected)
+                                .font(.system(size: 19, weight: isSelected ? .bold : .medium))
+                                .foregroundColor(isSelected ? Color.white : Color.white.opacity(0.45))
+                                .scaleEffect(isSelected ? 1.08 : 1.0)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
 
                             Text(tab.title)
                                 .font(.system(size: 11, weight: isSelected ? .bold : .medium))
                                 .foregroundColor(isSelected ? Color.white : Color.white.opacity(0.45))
                         }
-                        .frame(width: tabWidth, height: 64)
+                        .frame(width: tabWidth, height: 56)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            withAnimation(.spring(response: 0.38, dampingFraction: 0.52)) {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
                                 selectedTab = tab
                             }
                         }
                     }
                 }
             }
-            .frame(height: 64)
+            .frame(height: 56)
             .contentShape(Rectangle())
             .gesture(
-                // Gesture Usap Jari Real-Time 1:1 Tanpa Getaran
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         isTouching = true
@@ -125,7 +132,7 @@ public struct LiquidGlassTabBar: View {
                         let targetIndex = Int(clampedX / tabWidth)
                         let safeIndex = max(0, min(targetIndex, tabs.count - 1))
 
-                        withAnimation(.spring(response: 0.38, dampingFraction: 0.52)) {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
                             selectedTab = tabs[safeIndex]
                             dragPositionX = nil
                             isTouching = false
@@ -133,68 +140,8 @@ public struct LiquidGlassTabBar: View {
                     }
             )
         }
-        .frame(height: 68)
-        .padding(.horizontal, 20)
+        .frame(height: 56)
+        .padding(.horizontal, 24)
         .padding(.bottom, 2)
-    }
-}
-
-// MARK: - Sub-komponen Kaca Kristal Murni (100% Bebas RGB, Murni Glass & Refleksi Cahaya)
-public struct CrystalLiquidJellyBubble: View {
-    public init() {}
-
-    public var body: some View {
-        ZStack {
-            // 1. Crystal Glass Body (Ultra Thin Translucent Material)
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    Capsule()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color.white.opacity(0.22),
-                                    Color.white.opacity(0.04),
-                                    Color.clear
-                                ],
-                                center: .center,
-                                startRadius: 5,
-                                endRadius: 40
-                            )
-                        )
-                }
-                .clipShape(Capsule())
-                .shadow(color: Color.black.opacity(0.40), radius: 10, y: 5)
-
-            // 2. Specular Top Glare (Pantulan Kilau Lensa Kaca Cembung Atas)
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.70),
-                            Color.white.opacity(0.12),
-                            Color.clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .center
-                    )
-                )
-                .padding(2)
-
-            // 3. Specular Bottom Rim Reflection (Pantulan Cahaya Bawah Kaca)
-            Capsule()
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.85),
-                            Color.white.opacity(0.15),
-                            Color.white.opacity(0.35)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.2
-                )
-        }
     }
 }
