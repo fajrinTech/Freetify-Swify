@@ -20,19 +20,13 @@ public final class PlayerViewModel {
 
     public init() {
         audioService.onTrackFinished = { [weak self] in
-            MainActor.assumeIsolated {
-                self?.handleTrackFinished()
-            }
+            self?.handleTrackFinished()
         }
         audioService.onRemoteNext = { [weak self] in
-            MainActor.assumeIsolated {
-                self?.nextTrack()
-            }
+            self?.nextTrack()
         }
         audioService.onRemotePrevious = { [weak self] in
-            MainActor.assumeIsolated {
-                self?.previousTrack()
-            }
+            self?.previousTrack()
         }
     }
 

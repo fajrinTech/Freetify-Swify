@@ -14,6 +14,8 @@ public final class AudioPlayerService {
     private var itemEndObserver: Any?
     private var bgTaskID: UIBackgroundTaskIdentifier = .invalid
     private var currentArtwork: UIImage? = nil
+    private var lastNowPlayingRefreshTime: TimeInterval = 0.0
+    private var remoteCommandsRegistered = false
 
     public var currentTrack: Track?
     public var isPlaying: Bool = false
@@ -23,12 +25,10 @@ public final class AudioPlayerService {
     public var onRemoteNext: (() -> Void)?
     public var onRemotePrevious: (() -> Void)?
 
-    public init() {
-        setupAudioSession()
-        setupRemoteCommandCenter()
-    }
+    // ponytail: init kosong, semua setup dilakukan lazy saat lagu pertama diputar
+    public init() {}
 
-    private func setupAudioSession() {
+    private func ensureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default)
@@ -38,65 +38,37 @@ public final class AudioPlayerService {
         }
     }
 
-    // MARK: - Lock Screen & Control Center Remote Commands
-    private func setupRemoteCommandCenter() {
-        let commandCenter = MPRemoteCommandCenter.shared()
+    // MARK: - Lock Screen & Control Center Remote Commands (lazy, dipanggil sekali saat lagu pertama diputar)
+    private func ensureRemoteCommandCenter() {
+        guard !remoteCommandsRegistered else { return }
+        remoteCommandsRegistered = true
 
-        commandCenter.playCommand.removeTarget(nil)
-        commandCenter.playCommand.isEnabled = true
-        commandCenter.playCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                self?.play()
-            }
+        let cc = MPRemoteCommandCenter.shared()
+
+        cc.playCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.play() }
             return .success
         }
-
-        commandCenter.pauseCommand.removeTarget(nil)
-        commandCenter.pauseCommand.isEnabled = true
-        commandCenter.pauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                self?.pause()
-            }
+        cc.pauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.pause() }
             return .success
         }
-
-        commandCenter.togglePlayPauseCommand.removeTarget(nil)
-        commandCenter.togglePlayPauseCommand.isEnabled = true
-        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                self?.togglePlayPause()
-            }
+        cc.togglePlayPauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.togglePlayPause() }
             return .success
         }
-
-        commandCenter.nextTrackCommand.removeTarget(nil)
-        commandCenter.nextTrackCommand.isEnabled = true
-        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                self?.onRemoteNext?()
-            }
+        cc.nextTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.onRemoteNext?() }
             return .success
         }
-
-        commandCenter.previousTrackCommand.removeTarget(nil)
-        commandCenter.previousTrackCommand.isEnabled = true
-        commandCenter.previousTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                self?.onRemotePrevious?()
-            }
+        cc.previousTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.onRemotePrevious?() }
             return .success
         }
-
-        commandCenter.changePlaybackPositionCommand.removeTarget(nil)
-        commandCenter.changePlaybackPositionCommand.isEnabled = true
-        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
-            if let posEvent = event as? MPChangePlaybackPositionCommandEvent {
-                Task { @MainActor in
-                    self?.seek(to: posEvent.positionTime)
-                }
-                return .success
-            }
-            return .commandFailed
+        cc.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let posEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            Task { @MainActor in self?.seek(to: posEvent.positionTime) }
+            return .success
         }
     }
 
@@ -122,7 +94,6 @@ public final class AudioPlayerService {
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]
 
-        // Sanitasi ketat: Hanya buat MPMediaItemArtwork jika image memiliki CGImage valid
         if let img = currentArtwork, img.cgImage != nil, img.size.width > 0, img.size.height > 0 {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
         }
@@ -135,8 +106,10 @@ public final class AudioPlayerService {
         self.duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
         self.currentTime = 0.0
         self.currentArtwork = nil
+        self.lastNowPlayingRefreshTime = 0.0
 
-        setupAudioSession()
+        ensureAudioSession()
+        ensureRemoteCommandCenter()
 
         // Hapus observer item lama
         if let obs = itemEndObserver {
@@ -185,7 +158,7 @@ public final class AudioPlayerService {
             }
         }
 
-        // Auto-play lagu selanjutnya saat lagu selesai (queue: nil agar ditangkap background daemon)
+        // Auto-play lagu selanjutnya saat lagu selesai
         self.itemEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
@@ -201,14 +174,16 @@ public final class AudioPlayerService {
         self.isPlaying = true
         updateNowPlayingInfo()
 
-        // Unduh cover album untuk Lock Screen secara aman di MainActor
+        // Unduh cover album untuk Lock Screen
         if let artworkURL = track.artworkURL {
             Task {
-                if let (data, _) = try? await URLSession.shared.data(from: artworkURL),
-                   let img = UIImage(data: data) {
-                    await MainActor.run {
+                do {
+                    let (data, _) = try await URLSession.shared.data(from: artworkURL)
+                    if let img = UIImage(data: data) {
                         self.updateNowPlayingInfo(artworkImage: img)
                     }
+                } catch {
+                    // ponytail: artwork gagal = tidak masalah, lagu tetap jalan
                 }
             }
         }
@@ -221,7 +196,7 @@ public final class AudioPlayerService {
     }
 
     public func play() {
-        setupAudioSession()
+        ensureAudioSession()
         player?.volume = 1.0
         player?.play()
         self.isPlaying = true
