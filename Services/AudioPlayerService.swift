@@ -38,7 +38,7 @@ public final class AudioPlayerService {
     private func ensureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
+            try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
         } catch {
             print("[AudioPlayerService] AudioSession setup error: \(error.localizedDescription)")
@@ -158,22 +158,27 @@ public final class AudioPlayerService {
             newPlayer.play()
 
             // Observer waktu periodik: diatur satu kali untuk instance player.
-            // Semua state update dilakukan via DispatchQueue.main.async (bukan Task)
-            // untuk menghindari overhead spawning Task 5x/detik dan Swift 6 Sendable race.
+            // Blok observer bersifat @Sendable (nonisolated) — jangan akses state MainActor
+            // langsung (compile error di Swift 6) dan jangan pakai MainActor.assumeIsolated
+            // (bisa precondition-crash jika AVFoundation deliver dari queue internal).
+            // Hop eksplisit via Task { @MainActor } yang aman di compile & runtime.
             let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
             self.timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-                guard let self else { return }
                 let sec = CMTimeGetSeconds(time)
-                if sec.isFinite && sec >= 0 {
-                    self.currentTime = sec
-                }
-                if let item = self.player?.currentItem {
-                    let d = CMTimeGetSeconds(item.duration)
-                    if d.isFinite && d > 0 {
-                        self.duration = d
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if sec.isFinite && sec >= 0 {
+                        self.currentTime = sec
                     }
+                    if let item = self.player?.currentItem {
+                        let d = CMTimeGetSeconds(item.duration)
+                        if d.isFinite && d > 0 {
+                            self.duration = d
+                        }
+                    }
+                    // Sinkronkan Lock Screen / Control Center periodik (throttle ~1 detik)
+                    self.refreshNowPlayingIfNeeded()
                 }
-                self.refreshNowPlayingIfNeeded()
             }
         }
 
@@ -184,10 +189,14 @@ public final class AudioPlayerService {
             object: playerItem,
             queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            guard trackID == self.currentTrack?.id else { return }
-            self.startBackgroundTask()
-            self.delegate?.audioPlayerDidFinishTrack()
+            // Blok @Sendable nonisolated — akses MainActor harus lewat hop Task
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Anti stale event: abaikan notifikasi dari item lagu yang sudah diganti
+                guard trackID == self.currentTrack?.id else { return }
+                self.startBackgroundTask()
+                self.delegate?.audioPlayerDidFinishTrack()
+            }
         }
 
         // 8. Update state
@@ -196,14 +205,16 @@ public final class AudioPlayerService {
 
         // 9. Download cover album untuk Lock Screen
         if let artworkURL = track.artworkURL {
-            Task.detached(priority: .background) { [weak self] in
+            let trackID = track.id
+            Task.detached(priority: .background) {
+                // Kirim Data (Sendable) lintas isolation; UIImage di-decode di MainActor.
+                // Capture self kuat aman di sini: service adalah singleton & task berumur pendek.
                 do {
                     let (data, _) = try await URLSession.shared.data(from: artworkURL)
-                    if let img = UIImage(data: data) {
-                        await MainActor.run {
-                            guard trackID == self?.currentTrack?.id else { return }
-                            self?.updateNowPlayingInfo(artworkImage: img)
-                        }
+                    await MainActor.run {
+                        guard trackID == self.currentTrack?.id else { return }
+                        guard let img = UIImage(data: data) else { return }
+                        self.updateNowPlayingInfo(artworkImage: img)
                     }
                 } catch {
                     // ponytail: artwork gagal = tidak masalah, lagu tetap jalan
