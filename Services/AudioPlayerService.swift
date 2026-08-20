@@ -1,8 +1,9 @@
 import Foundation
 import AVFoundation
 import UIKit
+import MediaPlayer
 
-/// Layanan inti pemutar audio native iOS berbasis standar resmi Apple AVFoundation dengan transisi Fade-In halus
+/// Layanan inti pemutar audio native iOS berbasis standar resmi Apple AVFoundation & MediaPlayer
 @Observable
 @MainActor
 public final class AudioPlayerService {
@@ -13,15 +14,19 @@ public final class AudioPlayerService {
     private var itemEndObserver: Any?
     private var fadeTask: Task<Void, Never>?
     private var bgTaskID: UIBackgroundTaskIdentifier = .invalid
+    private var currentArtwork: UIImage? = nil
 
     public var currentTrack: Track?
     public var isPlaying: Bool = false
     public var currentTime: Double = 0.0
     public var duration: Double = 180.0
     public var onTrackFinished: (() -> Void)?
+    public var onRemoteNext: (() -> Void)?
+    public var onRemotePrevious: (() -> Void)?
 
     public init() {
         setupAudioSession()
+        setupRemoteCommandCenter()
     }
 
     private func setupAudioSession() {
@@ -34,10 +39,93 @@ public final class AudioPlayerService {
         }
     }
 
+    // MARK: - Lock Screen & Control Center Remote Commands
+    private func setupRemoteCommandCenter() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+
+        commandCenter.playCommand.isEnabled = true
+        commandCenter.playCommand.addTarget { [weak self] _ in
+            Task { @MainActor in
+                self?.play()
+            }
+            return .success
+        }
+
+        commandCenter.pauseCommand.isEnabled = true
+        commandCenter.pauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor in
+                self?.pause()
+            }
+            return .success
+        }
+
+        commandCenter.togglePlayPauseCommand.isEnabled = true
+        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor in
+                self?.togglePlayPause()
+            }
+            return .success
+        }
+
+        commandCenter.nextTrackCommand.isEnabled = true
+        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor in
+                self?.onRemoteNext?()
+            }
+            return .success
+        }
+
+        commandCenter.previousTrackCommand.isEnabled = true
+        commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor in
+                self?.onRemotePrevious?()
+            }
+            return .success
+        }
+
+        commandCenter.changePlaybackPositionCommand.isEnabled = true
+        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+            if let posEvent = event as? MPChangePlaybackPositionCommandEvent {
+                Task { @MainActor in
+                    self?.seek(to: posEvent.positionTime)
+                }
+                return .success
+            }
+            return .commandFailed
+        }
+    }
+
+    public func updateNowPlayingInfo(artworkImage: UIImage? = nil) {
+        guard let track = currentTrack else {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            return
+        }
+
+        if let img = artworkImage {
+            self.currentArtwork = img
+        }
+
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: track.title,
+            MPMediaItemPropertyArtist: track.artist,
+            MPMediaItemPropertyAlbumTitle: track.album,
+            MPMediaItemPropertyPlaybackDuration: duration > 0 ? duration : 180.0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
+        ]
+
+        if let img = currentArtwork {
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+        }
+
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
     public func loadAndPlay(track: Track) {
         self.currentTrack = track
         self.duration = (track.duration > 0 && !track.duration.isNaN) ? track.duration : 180.0
         self.currentTime = 0.0
+        self.currentArtwork = nil
 
         setupAudioSession()
 
@@ -85,7 +173,6 @@ public final class AudioPlayerService {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self = self else { return }
-                // ponytail: tahan eksekusi background agar iOS tidak membekukan app sebelum lagu baru berputar
                 self.startBackgroundTask()
                 self.onTrackFinished?()
             }
@@ -94,6 +181,17 @@ public final class AudioPlayerService {
         // Putar audio dengan transisi Fade-In yang lembut dan elegan
         fadeInAudio(duration: 0.35)
         self.isPlaying = true
+        updateNowPlayingInfo()
+
+        // Unduh cover album untuk Lock Screen
+        if let artworkURL = track.artworkURL {
+            Task {
+                if let (data, _) = try? await URLSession.shared.data(from: artworkURL),
+                   let img = UIImage(data: data) {
+                    self.updateNowPlayingInfo(artworkImage: img)
+                }
+            }
+        }
 
         // Selesaikan background task setelah pemutaran lagu baru berjalan
         Task {
@@ -106,6 +204,7 @@ public final class AudioPlayerService {
         setupAudioSession()
         fadeInAudio(duration: 0.25)
         self.isPlaying = true
+        updateNowPlayingInfo()
     }
 
     public func pause() {
@@ -113,6 +212,7 @@ public final class AudioPlayerService {
         fadeTask = nil
         player?.pause()
         self.isPlaying = false
+        updateNowPlayingInfo()
     }
 
     public func togglePlayPause() {
@@ -128,6 +228,7 @@ public final class AudioPlayerService {
         self.currentTime = seconds
         let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
         player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        updateNowPlayingInfo()
     }
 
     // MARK: - Background Task Management
