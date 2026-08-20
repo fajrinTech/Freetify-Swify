@@ -91,7 +91,7 @@ public struct LibraryView: View {
                                 .padding(.vertical, 8)
                             }
 
-                            Spacer(minLength: 140)
+                            Spacer(minLength: 175)
                         }
                         .padding(.top, 8)
                     }

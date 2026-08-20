@@ -83,7 +83,7 @@ public struct HomeView: View {
                             // Section: Track Pilihan Minggu Ini
                             featuredTracksSection()
 
-                            Spacer(minLength: 140)
+                            Spacer(minLength: 175)
                         }
                         .padding(.top, 12)
                     }

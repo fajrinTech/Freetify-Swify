@@ -1,7 +1,7 @@
 import SwiftUI
 import Observation
 
-/// Kontainer navigasi tab utama aplikasi Freetify dengan gesture swipe antar halaman, Sidebar Drawer, Floating Mini Player, dan Liquid Glass Tab Bar
+/// Kontainer navigasi tab utama aplikasi Freetify dengan gesture swipe antar halaman, Sidebar Drawer, Floating Mini Player, dan Frosted Glass Docking
 public struct MainTabView: View {
     @Environment(PlayerViewModel.self) private var playerVM
     @Environment(LibraryViewModel.self) private var libraryVM
@@ -16,7 +16,7 @@ public struct MainTabView: View {
         @Bindable var playerBinding = playerVM
 
         ZStack(alignment: .bottom) {
-            // Konten Halaman Swipeable Paging (Bisa digeser kiri-kanan secara mulus)
+            // 1. Konten Halaman Swipeable Paging (Bisa digeser kiri-kanan secara mulus)
             TabView(selection: $selectedTab) {
                 HomeView(onOpenDrawer: { isDrawerPresented = true })
                     .tag(TabItem.home)
@@ -30,20 +30,39 @@ public struct MainTabView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea(edges: .bottom)
 
-            // Floating Mini Player & Glass Tab Bar di Bagian Bawah
-            VStack(spacing: 8) {
+            // 2. Frosted Ambient Bottom Blur Backdrop (Membuat konten yang di-scroll memudar halus di bawah tab bar)
+            VStack {
+                Spacer()
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        Color(hex: "080B10").opacity(0.60),
+                        Color(hex: "080B10").opacity(0.92),
+                        Color(hex: "080B10")
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: playerVM.currentTrack != nil ? 180 : 120)
+                .background(.ultraThinMaterial.opacity(0.35))
+                .ignoresSafeArea(edges: .bottom)
+                .allowsHitTesting(false)
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: playerVM.currentTrack != nil)
+
+            // 3. Floating Mini Player & Glass Tab Bar di Bagian Bawah
+            VStack(spacing: 6) {
                 if playerVM.currentTrack != nil {
                     MiniPlayerView()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 LiquidGlassTabBar(selectedTab: $selectedTab)
-                    .frame(height: 72)
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, 2)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: playerVM.currentTrack != nil)
 
-            // Sidebar Drawer Navigasi
+            // 4. Sidebar Drawer Navigasi
             SidebarDrawerView(isPresented: $isDrawerPresented)
         }
         .task {

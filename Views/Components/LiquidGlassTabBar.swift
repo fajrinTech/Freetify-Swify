@@ -133,9 +133,9 @@ public struct LiquidGlassTabBar: View {
                     }
             )
         }
-        .frame(height: 72)
+        .frame(height: 68)
         .padding(.horizontal, 20)
-        .padding(.bottom, 8)
+        .padding(.bottom, 2)
     }
 }
 

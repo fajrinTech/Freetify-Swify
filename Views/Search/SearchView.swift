@@ -89,7 +89,7 @@ public struct SearchView: View {
                                 songResultsSection(libVM: libVM)
                             }
 
-                            Spacer(minLength: 140)
+                            Spacer(minLength: 175)
                         }
                         .padding(.top, 12)
                     }
