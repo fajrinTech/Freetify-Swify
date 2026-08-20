@@ -12,7 +12,6 @@ public final class AudioPlayerService {
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var itemEndObserver: Any?
-    private var fadeTask: Task<Void, Never>?
     private var bgTaskID: UIBackgroundTaskIdentifier = .invalid
     private var currentArtwork: UIImage? = nil
 
@@ -32,7 +31,7 @@ public final class AudioPlayerService {
     private func setupAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default)
+            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
             try session.setActive(true)
         } catch {
             print("[AudioPlayerService] AudioSession setup error: \(error.localizedDescription)")
@@ -150,10 +149,14 @@ public final class AudioPlayerService {
         if let existingPlayer = player {
             existingPlayer.replaceCurrentItem(with: playerItem)
             existingPlayer.automaticallyWaitsToMinimizeStalling = false
+            existingPlayer.volume = 1.0
+            existingPlayer.playImmediately(atRate: 1.0)
         } else {
             let newPlayer = AVPlayer(playerItem: playerItem)
             newPlayer.automaticallyWaitsToMinimizeStalling = false
+            newPlayer.volume = 1.0
             self.player = newPlayer
+            newPlayer.playImmediately(atRate: 1.0)
 
             // Observer waktu diatur satu kali untuk instance player
             let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
@@ -187,8 +190,6 @@ public final class AudioPlayerService {
             }
         }
 
-        // Putar audio dengan transisi Fade-In yang lembut dan elegan
-        fadeInAudio(duration: 0.35)
         self.isPlaying = true
         updateNowPlayingInfo()
 
@@ -204,22 +205,20 @@ public final class AudioPlayerService {
 
         // Selesaikan background task setelah pemutaran lagu baru berjalan
         Task {
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
             self.endBackgroundTask()
         }
     }
 
     public func play() {
-        guard !isPlaying else { return } // Pelindung anti double-play / double-trigger
         setupAudioSession()
-        fadeInAudio(duration: 0.25)
+        player?.volume = 1.0
+        player?.playImmediately(atRate: 1.0)
         self.isPlaying = true
         updateNowPlayingInfo()
     }
 
     public func pause() {
-        fadeTask?.cancel()
-        fadeTask = nil
         player?.pause()
         self.isPlaying = false
         updateNowPlayingInfo()
@@ -255,38 +254,6 @@ public final class AudioPlayerService {
         if bgTaskID != .invalid {
             UIApplication.shared.endBackgroundTask(bgTaskID)
             bgTaskID = .invalid
-        }
-    }
-
-    // MARK: - Smooth Audio Fade-In Swell
-    private func fadeInAudio(duration: TimeInterval) {
-        fadeTask?.cancel()
-        fadeTask = nil
-
-        guard let activePlayer = player else { return }
-
-        // ponytail: saat aplikasi di background, langsung set volume 1.0 agar tidak disuspensi oleh iOS
-        if UIApplication.shared.applicationState != .active {
-            activePlayer.volume = 1.0
-            activePlayer.play()
-            return
-        }
-
-        activePlayer.volume = 0.0
-        activePlayer.play()
-
-        fadeTask = Task { @MainActor [weak self, weak activePlayer] in
-            guard let _ = self, let p = activePlayer else { return }
-            let totalSteps = 15
-            let intervalNanos = UInt64((duration / Double(totalSteps)) * 1_000_000_000)
-
-            for step in 1...totalSteps {
-                if Task.isCancelled { break }
-                try? await Task.sleep(nanoseconds: intervalNanos)
-                if Task.isCancelled { break }
-                p.volume = min(1.0, Float(step) / Float(totalSteps))
-            }
-            p.volume = 1.0
         }
     }
 }
