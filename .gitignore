@@ -22,3 +22,9 @@ Payload/
 # Environment / Secret keys
 .env
 .env.local
+
+# Cloned Reference Repositories
+FabBar/
+LiquidGlassCheatsheet/
+union-tab-view/
+references/
