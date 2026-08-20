@@ -26,12 +26,13 @@ public final class AudioPlayerService {
     public init() {
         setupAudioSession()
         setupRemoteCommandCenter()
+        UIApplication.shared.beginReceivingRemoteControlEvents()
     }
 
     private func setupAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
+            try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
         } catch {
             print("[AudioPlayerService] AudioSession setup error: \(error.localizedDescription)")
@@ -42,6 +43,7 @@ public final class AudioPlayerService {
     private func setupRemoteCommandCenter() {
         let commandCenter = MPRemoteCommandCenter.shared()
 
+        commandCenter.playCommand.removeTarget(nil)
         commandCenter.playCommand.isEnabled = true
         commandCenter.playCommand.addTarget { [weak self] _ in
             Task { @MainActor in
@@ -50,6 +52,7 @@ public final class AudioPlayerService {
             return .success
         }
 
+        commandCenter.pauseCommand.removeTarget(nil)
         commandCenter.pauseCommand.isEnabled = true
         commandCenter.pauseCommand.addTarget { [weak self] _ in
             Task { @MainActor in
@@ -58,6 +61,7 @@ public final class AudioPlayerService {
             return .success
         }
 
+        commandCenter.togglePlayPauseCommand.removeTarget(nil)
         commandCenter.togglePlayPauseCommand.isEnabled = true
         commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
             Task { @MainActor in
@@ -66,6 +70,7 @@ public final class AudioPlayerService {
             return .success
         }
 
+        commandCenter.nextTrackCommand.removeTarget(nil)
         commandCenter.nextTrackCommand.isEnabled = true
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor in
@@ -74,6 +79,7 @@ public final class AudioPlayerService {
             return .success
         }
 
+        commandCenter.previousTrackCommand.removeTarget(nil)
         commandCenter.previousTrackCommand.isEnabled = true
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor in
@@ -82,6 +88,7 @@ public final class AudioPlayerService {
             return .success
         }
 
+        commandCenter.changePlaybackPositionCommand.removeTarget(nil)
         commandCenter.changePlaybackPositionCommand.isEnabled = true
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             if let posEvent = event as? MPChangePlaybackPositionCommandEvent {
@@ -104,16 +111,19 @@ public final class AudioPlayerService {
             self.currentArtwork = img
         }
 
+        let safeDuration = (duration.isFinite && duration > 0) ? duration : 180.0
+        let safeCurrentTime = (currentTime.isFinite && currentTime >= 0) ? currentTime : 0.0
+
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: track.title,
             MPMediaItemPropertyArtist: track.artist,
             MPMediaItemPropertyAlbumTitle: track.album,
-            MPMediaItemPropertyPlaybackDuration: duration > 0 ? duration : 180.0,
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
+            MPMediaItemPropertyPlaybackDuration: safeDuration,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: safeCurrentTime,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]
 
-        if let img = currentArtwork {
+        if let img = currentArtwork, img.size.width > 0, img.size.height > 0 {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
         }
 
@@ -148,15 +158,13 @@ public final class AudioPlayerService {
 
         if let existingPlayer = player {
             existingPlayer.replaceCurrentItem(with: playerItem)
-            existingPlayer.automaticallyWaitsToMinimizeStalling = false
             existingPlayer.volume = 1.0
-            existingPlayer.playImmediately(atRate: 1.0)
+            existingPlayer.play()
         } else {
             let newPlayer = AVPlayer(playerItem: playerItem)
-            newPlayer.automaticallyWaitsToMinimizeStalling = false
             newPlayer.volume = 1.0
             self.player = newPlayer
-            newPlayer.playImmediately(atRate: 1.0)
+            newPlayer.play()
 
             // Observer waktu diatur satu kali untuk instance player
             let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
@@ -213,7 +221,7 @@ public final class AudioPlayerService {
     public func play() {
         setupAudioSession()
         player?.volume = 1.0
-        player?.playImmediately(atRate: 1.0)
+        player?.play()
         self.isPlaying = true
         updateNowPlayingInfo()
     }
